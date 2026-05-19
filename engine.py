@@ -196,3 +196,19 @@ def probabilidade():
         resultados.append(valor)
 
     return float(np.mean(np.array(resultados) > 800000))
+
+# =========================
+# RISCO REAL FINAL (EXPORTAÇÃO)
+# =========================
+
+if perf.empty:
+    volatilidade = 0
+    drawdown = 0
+else:
+    serie = perf["Patrimonio"]
+    retorno = serie.pct_change().dropna()
+
+    volatilidade = retorno.std()
+
+    dd = (serie.cummax() - serie) / serie.cummax()
+    drawdown = dd.max()
