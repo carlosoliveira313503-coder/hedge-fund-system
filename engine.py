@@ -7,21 +7,21 @@ from sklearn.linear_model import LinearRegression
 from sklearn.cluster import KMeans
 
 # =========================
-# 1. DADOS SIMULADOS
+# DADOS SIMULADOS
 # =========================
 
-ativos = ["HGLG11", "XPLG11", "VISC11", "KNIP11", "MXRF11"]
+ativos = ["HGLG11","XPLG11","VISC11","KNIP11","MXRF11"]
 
 dados = []
 
 for ativo in ativos:
-    base = 100
-    
-    for i in range(300):
-        base *= (1 + np.random.normal(0.001, 0.02))
+    preco = 100
+
+    for i in range(200):
+        preco *= (1 + np.random.normal(0.001, 0.02))
         dados.append({
             "Ticker": ativo,
-            "Close": base
+            "Close": preco
         })
 
 df = pd.DataFrame(dados)
@@ -29,18 +29,21 @@ df = pd.DataFrame(dados)
 pivot = df.pivot(columns="Ticker", values="Close")
 retornos = pivot.pct_change().dropna()
 
+if retornos.empty:
+    retornos = pd.DataFrame(np.random.normal(0,0.01,(100,5)), columns=ativos)
+
 retorno_esperado = retornos.mean()
 risco = retornos.std()
 
 # =========================
-# 2. IA PREVISÃO
+# PREVISÃO IA
 # =========================
 
 previsoes = {}
 
 for ativo in retornos.columns:
     serie = retornos[ativo].dropna()
-    
+
     if len(serie) < 20:
         previsoes[ativo] = 0
         continue
@@ -48,40 +51,38 @@ for ativo in retornos.columns:
     X = np.arange(len(serie)).reshape(-1,1)
     y = serie.values
 
-    model = LinearRegression()
-    model.fit(X, y)
+    modelo = LinearRegression()
+    modelo.fit(X,y)
 
-    previsoes[ativo] = model.predict([[len(serie)]])[0]
+    previsoes[ativo] = modelo.predict([[len(serie)]])[0]
 
 previsoes = pd.Series(previsoes)
 
 # =========================
-# 3. MOMENTUM + STABILITY
+# MOMENTUM E STABILITY
 # =========================
 
 momentum = retornos.rolling(20).mean().iloc[-1].fillna(0)
-stability = (1 / risco).replace([np.inf, -np.inf], 0).fillna(0)
+stability = (1/risco).replace([np.inf,-np.inf],0).fillna(0)
+
+score = (previsoes*0.4 + momentum*0.3 + stability*0.3).fillna(0)
 
 # =========================
-# 4. SCORE
-# =========================
-
-score = (previsoes * 0.4 + momentum * 0.3 + stability * 0.3).fillna(0)
-
-# =========================
-# 5. REGIME
+# REGIME
 # =========================
 
 try:
     X_regime = retornos.mean(axis=1).values.reshape(-1,1)
-    kmeans = KMeans(n_clusters=3, n_init=10)
-    kmeans.fit(X_regime)
-    regime = ["bear", "lateral", "bull"][kmeans.labels_[-1]]
+
+    modelo_regime = KMeans(n_clusters=3, n_init=10)
+    modelo_regime.fit(X_regime)
+
+    regime = ["bear","lateral","bull"][modelo_regime.labels_[-1]]
 except:
     regime = "lateral"
 
 # =========================
-# 6. RL
+# RL
 # =========================
 
 q_table = {}
@@ -98,31 +99,35 @@ def escolher_acao(state):
 def atualizar_q(state, action, reward):
     alpha = 0.1
     gamma = 0.9
+
     atual = q_table[state][action]
     novo = atual + alpha * (reward + gamma * max(q_table[state]) - atual)
+
     q_table[state][action] = novo
+
 
 acoes = {}
 pesos_rl = []
 
 for ativo in retornos.columns:
 
-    r = retorno_esperado.get(ativo, 0)
-    rk = risco.get(ativo, 0.01)
+    r = retorno_esperado.get(ativo,0)
+    rk = risco.get(ativo,0.01)
 
     state = (round(r,4), round(rk,4))
 
     acao = escolher_acao(state)
 
     retorno_real = r + np.random.normal(0, rk)
+
     reward = retorno_real - rk
 
     atualizar_q(state, acao, reward)
 
     acoes[ativo] = acao
 
-    peso = [0, 0.1, 0.2, 0.4][acao]
-    pesos_rl.append(peso)
+    pesos_map = [0,0.1,0.2,0.4]
+    pesos_rl.append(pesos_map[acao])
 
 pesos_rl = np.array(pesos_rl)
 
@@ -132,7 +137,7 @@ else:
     pesos_rl = pesos_rl / pesos_rl.sum()
 
 # =========================
-# 7. RESULTADOS
+# RANKING
 # =========================
 
 ranking = pd.DataFrame({
@@ -146,120 +151,119 @@ ranking_rl = pd.DataFrame({
     "Peso RL": pesos_rl
 }).sort_values("Peso RL", ascending=False)
 
+if ranking_rl.empty:
+    ranking_rl = pd.DataFrame({
+        "Ativo": ativos,
+        "Peso RL": [1/len(ativos)]*len(ativos)
+    })
+
 melhor_ativo_rl = ranking_rl.iloc[0]["Ativo"]
 
 # =========================
-# 8. HISTÓRICO
+# HISTÓRICO
 # =========================
 
-arquivo_hist = "historico.csv"
+arquivo = "historico.csv"
 
-def salvar_hist(ativo, retorno):
+def salvar(ativo, retorno):
+    df_novo = pd.DataFrame({"Ativo":[ativo],"Retorno":[retorno]})
 
-    novo = pd.DataFrame({
-        "Ativo": [ativo],
-        "Retorno": [retorno]
-    })
+    if os.path.exists(arquivo):
+        df_antigo = pd.read_csv(arquivo)
+        df_novo = pd.concat([df_antigo, df_novo])
 
-    if os.path.exists(arquivo_hist):
-        antigo = pd.read_csv(arquivo_hist)
-        novo = pd.concat([antigo, novo])
+    df_novo.to_csv(arquivo,index=False)
 
-    novo.to_csv(arquivo_hist, index=False)
-
-retorno_real = np.random.normal(0.01, 0.02)
-salvar_hist(melhor_ativo_rl, retorno_real)
+ret_real = np.random.normal(0.01,0.02)
+salvar(melhor_ativo_rl, ret_real)
 
 # =========================
-# 9. PERFORMANCE
+# PERFORMANCE
 # =========================
 
-def calcular_performance():
+def performance():
 
-    if not os.path.exists(arquivo_hist):
+    if not os.path.exists(arquivo):
         return pd.DataFrame()
 
-    df = pd.read_csv(arquivo_hist)
+    df_hist = pd.read_csv(arquivo)
 
     capital = 100000
     valores = []
 
-    for r in df["Retorno"]:
+    for r in df_hist["Retorno"]:
         capital *= (1 + r)
         valores.append(capital)
 
-    df["Patrimônio"] = valores
+    df_hist["Patrimonio"] = valores
 
-    return df
+    return df_hist
 
-performance = calcular_performance()
+perf = performance()
 
 # =========================
-# 10. BENCHMARK (CDI SIMULADO)
+# BENCHMARK
 # =========================
 
 def benchmark():
 
-    if performance.empty:
+    if perf.empty:
         return []
 
-    base = 100000
+    capital = 100000
     valores = []
 
-    for _ in range(len(performance)):
-        base *= (1 + 0.005)
-        valores.append(base)
+    for i in range(len(perf)):
+        capital *= (1 + 0.005)
+        valores.append(capital)
 
     return valores
 
-benchmark_vals = benchmark()
+bench = benchmark()
 
 # =========================
-# 11. RISCO REAL
+# RISCO
 # =========================
 
-def calcular_risco():
+def risco():
 
-    if performance.empty:
-        return 0, 0
+    if perf.empty:
+        return 0,0
 
-    serie = performance["Patrimônio"]
-
+    serie = perf["Patrimonio"]
     retorno = serie.pct_change().dropna()
 
     vol = retorno.std()
 
-    drawdown = (serie.cummax() - serie) / serie.cummax()
-    max_dd = drawdown.max()
+    dd = (serie.cummax() - serie)/serie.cummax()
+    max_dd = dd.max()
 
     return vol, max_dd
 
-volatilidade, drawdown = calcular_risco()
+volatilidade, drawdown = risco()
 
 # =========================
-# 12. MONTE CARLO
+# MONTE CARLO
 # =========================
 
-portfolio_returns = retornos.dot(pesos_rl)
+portfolio = retornos.dot(pesos_rl)
 
 def probabilidade():
 
     resultados = []
 
-    media = portfolio_returns.mean()
-    desvio = portfolio_returns.std()
+    media = portfolio.mean()
+    desvio = portfolio.std()
 
     if np.isnan(media): media = 0.005
     if np.isnan(desvio): desvio = 0.02
 
-    for _ in range(100):
+    for i in range(100):
         valor = 100000
 
-        for _ in range(30):
-            retorno = np.random.normal(media, desvio)
-            valor *= (1 + retorno)
+        for j in range(30):
+            valor *= (1 + np.random.normal(media,desvio))
 
         resultados.append(valor)
 
     return float(np.mean(np.array(resultados) > 800000))
-``
