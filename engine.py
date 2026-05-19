@@ -20,16 +20,27 @@ def gerar_dados():
         try:
             df = yf.download(ativo, period="1y")
 
-            if not df.empty:
-                df = df.reset_index()
-                df["Ticker"] = ativo
-                dados.append(df)
+            # ✅ GARANTE QUE TEM DADOS
+            if df is None or df.empty:
+                continue
+
+            # ✅ GARANTE COLUNA CLOSE
+            if "Close" not in df.columns:
+                if "Adj Close" in df.columns:
+                    df["Close"] = df["Adj Close"]
+                else:
+                    continue
+
+            df = df.reset_index()
+            df["Ticker"] = ativo
+
+            dados.append(df)
 
         except:
             continue
 
     if len(dados) == 0:
-        raise Exception("Erro ao baixar dados")
+        raise Exception("Falha total ao baixar dados")
 
     final = pd.concat(dados)
     final.to_sql("precos", conn, if_exists="replace", index=False)
@@ -37,6 +48,7 @@ def gerar_dados():
     return final
 
 
+# ========= CARREGAR OU GERAR =========
 try:
     df = pd.read_sql("SELECT * FROM precos", conn)
     if df.empty:
@@ -45,8 +57,14 @@ except:
     df = gerar_dados()
 
 
+# ✅ GARANTE CLOSED SEMPRE
+if "Close" not in df.columns:
+    raise Exception("Coluna Close não encontrada")
+
 df = df.dropna(subset=["Close"])
 
+
+# ========= MÉTRICAS =========
 precos = df.groupby("Ticker")["Close"].last()
 
 retornos = df.groupby("Ticker")["Close"].pct_change()
@@ -59,7 +77,6 @@ retornos = retornos.reindex(precos.index).fillna(0)
 risco = risco.reindex(precos.index).fillna(0)
 
 score = (retornos * 0.5) - (risco * 0.3)
-score = score.fillna(0)
 
 ranking = pd.DataFrame({
     "Preço": precos,
@@ -71,6 +88,7 @@ ranking = pd.DataFrame({
 ranking = ranking.sort_values("Score", ascending=False)
 
 
+# ========= MONTE CARLO =========
 def probabilidade():
     try:
         resultados = []
