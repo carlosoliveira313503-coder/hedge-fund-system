@@ -38,22 +38,11 @@ try:
             st.warning("Sem histórico ainda")
         else:
             st.line_chart(perf["Patrimonio"])
-
-            if len(bench) > 0:
-                import pandas as pd
-
-                df_comp = pd.DataFrame({
-                    "Sistema": perf["Patrimonio"],
-                    "Benchmark": bench
-                })
-
-                st.line_chart(df_comp)
-
             st.dataframe(perf)
 
     with tab4:
         st.metric("📉 Volatilidade", round(volatilidade,4))
-        st.metric("⚠️ Drawdown Máx", round(drawdown,4))
+        st.metric("⚠️ Drawdown", round(drawdown,4))
 
 except Exception as e:
     st.error(f"Erro ao carregar sistema: {e}")
