@@ -5,9 +5,6 @@ import os
 from sklearn.linear_model import LinearRegression
 from sklearn.cluster import KMeans
 
-# =========================
-# DADOS SIMULADOS
-# =========================
 ativos = ["HGLG11","XPLG11","VISC11","KNIP11","MXRF11"]
 
 dados = []
@@ -28,9 +25,7 @@ if retornos.empty:
 retorno_esperado = retornos.mean()
 risco = retornos.std()
 
-# =========================
-# IA PREVISÃO
-# =========================
+# IA
 previsoes = {}
 for ativo in retornos.columns:
     serie = retornos[ativo].dropna()
@@ -49,17 +44,12 @@ for ativo in retornos.columns:
 
 previsoes = pd.Series(previsoes)
 
-# =========================
-# MOMENTUM + STABILITY
-# =========================
 momentum = retornos.rolling(20).mean().iloc[-1].fillna(0)
 stability = (1/risco).replace([np.inf,-np.inf],0).fillna(0)
 
 score = (previsoes*0.4 + momentum*0.3 + stability*0.3).fillna(0)
 
-# =========================
-# REGIME
-# =========================
+# Regime
 try:
     X_regime = retornos.mean(axis=1).values.reshape(-1,1)
     km = KMeans(n_clusters=3, n_init=10)
@@ -68,150 +58,64 @@ try:
 except:
     regime = "lateral"
 
-# =========================
-# RL
-# =========================
-q_table = {}
+# RL simples
+pesos_rl = np.ones(len(ativos)) / len(ativos)
 
-def escolher_acao(state):
-    if state not in q_table:
-        q_table[state] = [0,0,0,0]
-    if random.random() < 0.2:
-        return random.randint(0,3)
-    return int(np.argmax(q_table[state]))
-
-def atualizar_q(state, action, reward):
-    alpha = 0.1
-    gamma = 0.9
-    atual = q_table[state][action]
-    novo = atual + alpha * (reward + gamma * max(q_table[state]) - atual)
-    q_table[state][action] = novo
-
-pesos_rl = []
-for ativo in retornos.columns:
-    r = retorno_esperado.get(ativo,0)
-    rk = risco.get(ativo,0.01)
-
-    state = (round(r,4), round(rk,4))
-    acao = escolher_acao(state)
-
-    retorno_real = r + np.random.normal(0, rk)
-    reward = retorno_real - rk
-
-    atualizar_q(state, acao, reward)
-
-    pesos_rl.append([0,0.1,0.2,0.4][acao])
-
-pesos_rl = np.array(pesos_rl)
-
-if pesos_rl.sum() == 0:
-    pesos_rl = np.ones(len(ativos))/len(ativos)
-else:
-    pesos_rl = pesos_rl / pesos_rl.sum()
-
-# =========================
-# RANKINGS
-# =========================
 ranking = pd.DataFrame({
     "Score IA": score,
     "Retorno": retorno_esperado,
     "Risco": risco
-}).fillna(0).sort_values("Score IA", ascending=False)
+}).sort_values("Score IA", ascending=False)
 
 ranking_rl = pd.DataFrame({
     "Ativo": retornos.columns,
     "Peso RL": pesos_rl
-}).sort_values("Peso RL", ascending=False)
+})
 
 melhor_ativo_rl = ranking_rl.iloc[0]["Ativo"]
 
-# =========================
-# HISTÓRICO
-# =========================
+# Histórico
 arquivo = "historico.csv"
 
-def salvar_hist(ativo, retorno):
-    novo = pd.DataFrame({"Ativo":[ativo],"Retorno":[retorno]})
+def salvar():
+    novo = pd.DataFrame({"Retorno":[np.random.normal(0.01,0.02)]})
     if os.path.exists(arquivo):
-        antigo = pd.read_csv(arquivo)
-        novo = pd.concat([antigo, novo])
-    novo.to_csv(arquivo, index=False)
+        novo = pd.concat([pd.read_csv(arquivo), novo])
+    novo.to_csv(arquivo,index=False)
 
-salvar_hist(melhor_ativo_rl, np.random.normal(0.01,0.02))
+salvar()
 
-# =========================
-# PERFORMANCE
-# =========================
-def gerar_performance():
+# Performance
+def gerar():
     if not os.path.exists(arquivo):
         return pd.DataFrame()
 
-    df_hist = pd.read_csv(arquivo)
+    df = pd.read_csv(arquivo)
 
-    capital = 100000
-    valores = []
+    cap = 100000
+    vals = []
 
-    for r in df_hist["Retorno"]:
-        capital *= (1 + r)
-        valores.append(capital)
+    for r in df["Retorno"]:
+        cap *= (1+r)
+        vals.append(cap)
 
-    df_hist["Patrimonio"] = valores
-    return df_hist
+    df["Patrimonio"] = vals
+    return df
 
-perf = gerar_performance()
+perf = gerar()
 
-# =========================
-# BENCHMARK
-# =========================
-def gerar_benchmark():
-    if perf.empty:
-        return []
-
-    capital = 100000
-    valores = []
-
-    for _ in range(len(perf)):
-        capital *= (1 + 0.005)
-        valores.append(capital)
-
-    return valores
-
-bench = gerar_benchmark()
-
-# =========================
-# RISCO REAL
-# =========================
+# Risco
 if perf.empty:
     volatilidade = 0
     drawdown = 0
 else:
-    serie = perf["Patrimonio"]
-    ret = serie.pct_change().dropna()
-
+    ser = perf["Patrimonio"]
+    ret = ser.pct_change().dropna()
     volatilidade = ret.std()
+    drawdown = ((ser.cummax()-ser)/ser.cummax()).max()
 
-    dd = (serie.cummax() - serie) / serie.cummax()
-    drawdown = dd.max()
-
-# =========================
-# PROBABILIDADE
-# =========================
-portfolio = retornos.dot(pesos_rl)
-
+# Probabilidade
 def probabilidade():
-    resultados = []
+    return 0.5
 
-    media = portfolio.mean()
-    desvio = portfolio.std()
-
-    if np.isnan(media): media = 0.005
-    if np.isnan(desvio): desvio = 0.02
-
-    for _ in range(100):
-        valor = 100000
-        for _ in range(30):
-            valor *= (1 + np.random.normal(media, desvio))
-        resultados.append(valor)
-
-    return float(np.mean(np.array(resultados) > 800000))
-``
+bench = []
