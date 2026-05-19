@@ -1,17 +1,19 @@
+
 import sqlite3
 import pandas as pd
 import numpy as np
+import os
 
 conn = sqlite3.connect("database.db")
-df = pd.read_sql("SELECT * FROM precos", conn)
 
-precos = df.groupby("Ticker")["Close"].last()
-retornos = df.groupby("Ticker")["Close"].pct_change().groupby(df["Ticker"]).mean()
-risco = df.groupby("Ticker")["Close"].pct_change().groupby(df["Ticker"]).std()
+# ✅ criar dados automaticamente se não existir
+try:
+    df = pd.read_sql("SELECT * FROM precos", conn)
+except:
+    import data_collector
+    conn = sqlite3.connect("database.db")  # reconectar
+    df = pd.read_sql("SELECT * FROM precos", conn)
 
-score = (retornos * 0.5) - (risco * 0.3)
-
-ranking = pd.DataFrame({
     "Preço": precos,
     "Retorno": retornos,
     "Risco": risco,
