@@ -1,20 +1,13 @@
-import streamlit as st
+from engine import ranking, probabilidade, regime, risco_carteira, pesos_otimos
 
-st.set_page_config(layout="wide")
+st.metric("Regime IA", regime)
+st.metric("Risco Carteira", round(risco_carteira,4))
 
-st.title("🏦 Hedge Fund System")
+st.success(f"🔥 COMPRAR: {ranking.index[0]}")
 
-try:
-    from engine import ranking, probabilidade
+pesos_df = pd.DataFrame({
+    "Ativo": ranking.index,
+    "Peso": pesos_otimos
+})
 
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Melhor Ativo", ranking.index[0])
-    col2.metric("Score", round(ranking.iloc[0]["Score"], 3))
-    col3.metric("Probabilidade 800k", f"{probabilidade():.2%}")
-
-    st.subheader("Top Ativos")
-    st.dataframe(ranking)
-
-except Exception as e:
-    st.error(f"Erro ao carregar sistema: {e}")
+st.dataframe(pesos_df)
