@@ -55,3 +55,32 @@ try:
 
 except Exception as e:
     st.error(f"Erro ao carregar sistema: {e}")
+# =========================
+# PROBABILIDADE (MONTE CARLO)
+# =========================
+
+portfolio = retornos.dot(pesos_rl)
+
+def probabilidade():
+
+    resultados = []
+
+    media = portfolio.mean()
+    desvio = portfolio.std()
+
+    if np.isnan(media):
+        media = 0.005
+
+    if np.isnan(desvio):
+        desvio = 0.02
+
+    for _ in range(100):
+        valor = 100000
+
+        for _ in range(30):
+            valor *= (1 + np.random.normal(media, desvio))
+
+        resultados.append(valor)
+
+    return float(np.mean(np.array(resultados) > 800000))
+``
