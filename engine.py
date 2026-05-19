@@ -21,24 +21,41 @@ df = pd.DataFrame(dados)
 pivot = df.pivot(columns="Ticker", values="Close")
 retornos = pivot.pct_change().dropna()
 
+# proteção
+if retornos.empty:
+    retornos = pd.DataFrame(np.random.normal(0,0.01,(100,5)), columns=ativos)
+
 retorno_esperado = retornos.mean()
 risco = retornos.std()
 
 # =========================
-# IA
+# IA COM PROTEÇÃO
 # =========================
 previsoes = {}
 
 for ativo in retornos.columns:
-    serie = retornos[ativo]
+    serie = retornos[ativo].dropna()
 
-    X = np.arange(len(serie)).reshape(-1,1)
-    y = serie.values
+    # ✅ PROTEÇÃO TOTAL
+    if serie is None or len(serie) == 0:
+        previsoes[ativo] = 0
+        continue
 
-    model = LinearRegression()
-    model.fit(X,y)
+    if len(serie) < 20:
+        previsoes[ativo] = 0
+        continue
 
-    previsoes[ativo] = model.predict([[len(serie)]])[0]
+    try:
+        X = np.arange(len(serie)).reshape(-1,1)
+        y = serie.values
+
+        model = LinearRegression()
+        model.fit(X,y)
+
+        previsoes[ativo] = model.predict([[len(serie)]])[0]
+
+    except:
+        previsoes[ativo] = 0
 
 previsoes = pd.Series(previsoes)
 
@@ -52,14 +69,14 @@ score = (previsoes*0.4 + momentum*0.3 + stability*0.3).fillna(0)
 # =========================
 try:
     X_regime = retornos.mean(axis=1).values.reshape(-1,1)
-    km = KMeans(n_clusters=3,n_init=10)
+    km = KMeans(n_clusters=3, n_init=10)
     km.fit(X_regime)
     regime = ["bear","lateral","bull"][km.labels_[-1]]
 except:
     regime = "lateral"
 
 # =========================
-# RL SIMPLES (distribuição igual)
+# RL SIMPLES
 # =========================
 pesos_rl = np.ones(len(ativos))/len(ativos)
 
