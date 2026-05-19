@@ -4,49 +4,47 @@ import numpy as np
 import os
 import yfinance as yf
 
-# Conecta banco
+# =========================
+# 1. CONEXÃO COM BANCO
+# =========================
 conn = sqlite3.connect("database.db")
 
-# Se tabela não existir, cria do zero
-try:
-    df = pd.read_sql("SELECT * FROM precos", conn)
-except:
-    ativos = ["HGLG11.SA","XPLG11.SA","VISC11.SA","KNIP11.SA"]
-    dados = []
+# =========================
+# 2. GARANTIR DADOS
+# =========================
+def carregar_dados():
+    try:
+        df = pd.read_sql("SELECT * FROM precos", conn)
 
-    for ativo in ativos:
-        data = yf.download(ativo, period="1y")
-        data["Ticker"] = ativo
-        data = data.reset_index()
-        dados.append(data)
+        # se tabela existe mas está vazia, força recriação
+        if df.empty:
+            raise Exception("Tabela vazia")
 
-    df = pd.concat(dados)
-    df.to_sql("precos", conn, if_exists="replace", index=False)
+        return df
 
-# Cálculos
-precos = df.groupby("Ticker")["Close"].last()
-retornos = df.groupby("Ticker")["Close"].pct_change().groupby(df["Ticker"]).mean()
-risco = df.groupby("Ticker")["Close"].pct_change().groupby(df["Ticker"]).std()
+    except:
+        ativos = [
+            "HGLG11.SA",
+            "XPLG11.SA",
+            "VISC11.SA",
+            "KNIP11.SA",
+            "MXRF11.SA"
+        ]
 
-score = (retornos * 0.5) - (risco * 0.3)
+        dados = []
 
-ranking = pd.DataFrame({
-    "Preço": precos,
-    "Retorno": retornos,
-    "Risco": risco,
-    "Score": score
-}).sort_values("Score", ascending=False)
+        for ativo in ativos:
+            try:
+                data = yf.download(ativo, period="1y")
 
+                if not data.empty:
+                    data["Ticker"] = ativo
+                    data = data.reset_index()
+                    dados.append(data)
 
-# Monte Carlo
-def probabilidade():
-    resultados = []
+            except:
+                continue
 
-    for _ in range(200):
-        valor = 100000
-        for _ in range(60):
-            retorno = np.random.normal(retornos.mean(), risco.mean())
-            valor *= (1 + retorno)
-        resultados.append(valor)
+        if len(dados) == 0:
+            raise Exception("Falha ao baixar dados")
 
-    return np.mean(np.array(resultados) > 800000)
