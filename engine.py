@@ -2,8 +2,14 @@ import sqlite3
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import os
+
+# ✅ SEMPRE recriar banco do zero (corrige bug)
+if os.path.exists("database.db"):
+    os.remove("database.db")
 
 conn = sqlite3.connect("database.db")
+
 
 def gerar_dados():
     ativos = [
@@ -20,11 +26,10 @@ def gerar_dados():
         try:
             df = yf.download(ativo, period="1y")
 
-            # ✅ GARANTE QUE TEM DADOS
             if df is None or df.empty:
                 continue
 
-            # ✅ GARANTE COLUNA CLOSE
+            # ✅ garante Close
             if "Close" not in df.columns:
                 if "Adj Close" in df.columns:
                     df["Close"] = df["Adj Close"]
@@ -40,7 +45,7 @@ def gerar_dados():
             continue
 
     if len(dados) == 0:
-        raise Exception("Falha total ao baixar dados")
+        raise Exception("Falha ao baixar dados do Yahoo")
 
     final = pd.concat(dados)
     final.to_sql("precos", conn, if_exists="replace", index=False)
@@ -48,23 +53,13 @@ def gerar_dados():
     return final
 
 
-# ========= CARREGAR OU GERAR =========
-try:
-    df = pd.read_sql("SELECT * FROM precos", conn)
-    if df.empty:
-        df = gerar_dados()
-except:
-    df = gerar_dados()
+# ✅ SEMPRE gerar banco limpo
+df = gerar_dados()
 
-
-# ✅ GARANTE CLOSED SEMPRE
-if "Close" not in df.columns:
-    raise Exception("Coluna Close não encontrada")
-
+# limpeza
 df = df.dropna(subset=["Close"])
 
-
-# ========= MÉTRICAS =========
+# métricas
 precos = df.groupby("Ticker")["Close"].last()
 
 retornos = df.groupby("Ticker")["Close"].pct_change()
@@ -73,6 +68,7 @@ retornos = retornos.groupby(df["Ticker"]).mean().fillna(0)
 risco = df.groupby("Ticker")["Close"].pct_change()
 risco = risco.groupby(df["Ticker"]).std().fillna(0)
 
+# alinhar
 retornos = retornos.reindex(precos.index).fillna(0)
 risco = risco.reindex(precos.index).fillna(0)
 
@@ -88,7 +84,6 @@ ranking = pd.DataFrame({
 ranking = ranking.sort_values("Score", ascending=False)
 
 
-# ========= MONTE CARLO =========
 def probabilidade():
     try:
         resultados = []
