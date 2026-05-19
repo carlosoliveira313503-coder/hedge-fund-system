@@ -41,9 +41,9 @@ try:
             st.dataframe(perf)
 
     with tab4:
-        st.metric("📉 Volatilidade", round(volatilidade,4))
-        st.metric("⚠️ Drawdown", round(drawdown,4))
+        st.metric("📉 Volatilidade", round(volatilidade, 4))
+        st.metric("⚠️ Drawdown", round(drawdown, 4))
 
 except Exception as e:
     st.error(f"Erro ao carregar sistema: {e}")
-``
+    
