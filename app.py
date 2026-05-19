@@ -3,9 +3,6 @@ import pandas as pd
 
 st.set_page_config(layout="wide", page_title="Hedge Fund RL")
 
-# =============================
-# HEADER
-# =============================
 st.markdown("## 🏦 Hedge Fund RL System")
 st.markdown("---")
 
@@ -17,6 +14,11 @@ try:
         probabilidade,
         regime
     )
+
+    # ✅ GARANTE QUE TEM DADOS
+    if ranking.empty or ranking_rl.empty:
+        st.warning("Sistema ainda está carregando dados...")
+        st.stop()
 
     # =============================
     # KPIs
@@ -35,7 +37,7 @@ try:
     st.success(f"🚀 AÇÃO RECOMENDADA: COMPRAR {melhor_ativo_rl}")
 
     # =============================
-    # TABS (NÍVEL PROFISSIONAL)
+    # TABS
     # =============================
     tab1, tab2, tab3 = st.tabs(["📊 Ranking IA", "🤖 Portfólio RL", "📈 Insight"])
 
@@ -49,12 +51,12 @@ try:
 
     # TAB 3
     with tab3:
-        st.write("📌 Sistema está operando com:")
+        st.write("📌 Sistema ativo com:")
         st.write("- IA preditiva")
         st.write("- Reinforcement Learning")
         st.write("- Otimização de carteira")
 
-        if ranking.iloc[0]["Score IA"] > 0:
+        if not ranking.empty and ranking.iloc[0]["Score IA"] > 0:
             st.success("Mercado favorável segundo IA")
         else:
             st.warning("Mercado com risco elevado")
