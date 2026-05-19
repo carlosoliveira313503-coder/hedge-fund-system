@@ -32,7 +32,6 @@ risco = retornos.std()
 # IA PREVISÃO
 # =========================
 previsoes = {}
-
 for ativo in retornos.columns:
     serie = retornos[ativo].dropna()
 
@@ -59,7 +58,7 @@ stability = (1/risco).replace([np.inf,-np.inf],0).fillna(0)
 score = (previsoes*0.4 + momentum*0.3 + stability*0.3).fillna(0)
 
 # =========================
-# REGIME DE MERCADO
+# REGIME
 # =========================
 try:
     X_regime = retornos.mean(axis=1).values.reshape(-1,1)
@@ -77,10 +76,8 @@ q_table = {}
 def escolher_acao(state):
     if state not in q_table:
         q_table[state] = [0,0,0,0]
-
     if random.random() < 0.2:
         return random.randint(0,3)
-
     return int(np.argmax(q_table[state]))
 
 def atualizar_q(state, action, reward):
@@ -91,20 +88,17 @@ def atualizar_q(state, action, reward):
     q_table[state][action] = novo
 
 pesos_rl = []
-
 for ativo in retornos.columns:
-
     r = retorno_esperado.get(ativo,0)
     rk = risco.get(ativo,0.01)
 
-    estado = (round(r,4), round(rk,4))
-
-    acao = escolher_acao(estado)
+    state = (round(r,4), round(rk,4))
+    acao = escolher_acao(state)
 
     retorno_real = r + np.random.normal(0, rk)
     reward = retorno_real - rk
 
-    atualizar_q(estado, acao, reward)
+    atualizar_q(state, acao, reward)
 
     pesos_rl.append([0,0.1,0.2,0.4][acao])
 
@@ -166,49 +160,58 @@ def gerar_performance():
 
 perf = gerar_performance()
 
+# =========================
+# BENCHMARK
+# =========================
+def gerar_benchmark():
+    if perf.empty:
+        return []
+
+    capital = 100000
+    valores = []
+
+    for _ in range(len(perf)):
+        capital *= (1 + 0.005)
+        valores.append(capital)
+
+    return valores
+
+bench = gerar_benchmark()
 
 # =========================
-# PROBABILIDADE (MONTE CARLO)
+# RISCO REAL
 # =========================
-
-portfolio = retornos.dot(pesos_rl)
-
-def probabilidade():
-
-    resultados = []
-
-    media = portfolio.mean()
-    desvio = portfolio.std()
-
-    if np.isnan(media):
-        media = 0.005
-
-    if np.isnan(desvio):
-        desvio = 0.02
-
-    for _ in range(100):
-        valor = 100000
-
-        for _ in range(30):
-            retorno = np.random.normal(media, desvio)
-            valor *= (1 + retorno)
-
-        resultados.append(valor)
-
-    return float(np.mean(np.array(resultados) > 800000))
-
-# =========================
-# RISCO REAL FINAL (EXPORTAÇÃO)
-# =========================
-
 if perf.empty:
     volatilidade = 0
     drawdown = 0
 else:
     serie = perf["Patrimonio"]
-    retorno = serie.pct_change().dropna()
+    ret = serie.pct_change().dropna()
 
-    volatilidade = retorno.std()
+    volatilidade = ret.std()
 
     dd = (serie.cummax() - serie) / serie.cummax()
     drawdown = dd.max()
+
+# =========================
+# PROBABILIDADE
+# =========================
+portfolio = retornos.dot(pesos_rl)
+
+def probabilidade():
+    resultados = []
+
+    media = portfolio.mean()
+    desvio = portfolio.std()
+
+    if np.isnan(media): media = 0.005
+    if np.isnan(desvio): desvio = 0.02
+
+    for _ in range(100):
+        valor = 100000
+        for _ in range(30):
+            valor *= (1 + np.random.normal(media, desvio))
+        resultados.append(valor)
+
+    return float(np.mean(np.array(resultados) > 800000))
+``
