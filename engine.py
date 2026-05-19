@@ -1,12 +1,14 @@
 import pandas as pd
 import numpy as np
-import random
 import os
 from sklearn.linear_model import LinearRegression
 from sklearn.cluster import KMeans
 
 ativos = ["HGLG11","XPLG11","VISC11","KNIP11","MXRF11"]
 
+# =========================
+# DADOS
+# =========================
 dados = []
 for ativo in ativos:
     preco = 100
@@ -19,28 +21,24 @@ df = pd.DataFrame(dados)
 pivot = df.pivot(columns="Ticker", values="Close")
 retornos = pivot.pct_change().dropna()
 
-if retornos.empty:
-    retornos = pd.DataFrame(np.random.normal(0,0.01,(100,5)), columns=ativos)
-
 retorno_esperado = retornos.mean()
 risco = retornos.std()
 
+# =========================
 # IA
+# =========================
 previsoes = {}
-for ativo in retornos.columns:
-    serie = retornos[ativo].dropna()
 
-    if len(serie) < 20:
-        previsoes[ativo] = 0
-        continue
+for ativo in retornos.columns:
+    serie = retornos[ativo]
 
     X = np.arange(len(serie)).reshape(-1,1)
     y = serie.values
 
-    modelo = LinearRegression()
-    modelo.fit(X,y)
+    model = LinearRegression()
+    model.fit(X,y)
 
-    previsoes[ativo] = modelo.predict([[len(serie)]])[0]
+    previsoes[ativo] = model.predict([[len(serie)]])[0]
 
 previsoes = pd.Series(previsoes)
 
@@ -49,17 +47,21 @@ stability = (1/risco).replace([np.inf,-np.inf],0).fillna(0)
 
 score = (previsoes*0.4 + momentum*0.3 + stability*0.3).fillna(0)
 
-# Regime
+# =========================
+# REGIME
+# =========================
 try:
     X_regime = retornos.mean(axis=1).values.reshape(-1,1)
-    km = KMeans(n_clusters=3, n_init=10)
+    km = KMeans(n_clusters=3,n_init=10)
     km.fit(X_regime)
     regime = ["bear","lateral","bull"][km.labels_[-1]]
 except:
     regime = "lateral"
 
-# RL simples
-pesos_rl = np.ones(len(ativos)) / len(ativos)
+# =========================
+# RL SIMPLES (distribuição igual)
+# =========================
+pesos_rl = np.ones(len(ativos))/len(ativos)
 
 ranking = pd.DataFrame({
     "Score IA": score,
@@ -68,13 +70,15 @@ ranking = pd.DataFrame({
 }).sort_values("Score IA", ascending=False)
 
 ranking_rl = pd.DataFrame({
-    "Ativo": retornos.columns,
+    "Ativo": ranking.index,
     "Peso RL": pesos_rl
 })
 
-melhor_ativo_rl = ranking_rl.iloc[0]["Ativo"]
+melhor_ativo_rl = ranking.index[0]
 
-# Histórico
+# =========================
+# HISTÓRICO
+# =========================
 arquivo = "historico.csv"
 
 def salvar():
@@ -85,7 +89,9 @@ def salvar():
 
 salvar()
 
-# Performance
+# =========================
+# PERFORMANCE
+# =========================
 def gerar():
     if not os.path.exists(arquivo):
         return pd.DataFrame()
@@ -104,18 +110,33 @@ def gerar():
 
 perf = gerar()
 
-# Risco
+# =========================
+# RISCO
+# =========================
 if perf.empty:
     volatilidade = 0
     drawdown = 0
 else:
-    ser = perf["Patrimonio"]
-    ret = ser.pct_change().dropna()
+    serie = perf["Patrimonio"]
+    ret = serie.pct_change().dropna()
     volatilidade = ret.std()
-    drawdown = ((ser.cummax()-ser)/ser.cummax()).max()
+    drawdown = ((serie.cummax()-serie)/serie.cummax()).max()
 
-# Probabilidade
+# =========================
+# BENCHMARK
+# =========================
+if perf.empty:
+    bench = []
+else:
+    cap = 100000
+    bench = []
+    for _ in range(len(perf)):
+        cap *= (1+0.005)
+        bench.append(cap)
+
+# =========================
+# PROBABILIDADE
+# =========================
 def probabilidade():
     return 0.5
-
-bench = []
+    
