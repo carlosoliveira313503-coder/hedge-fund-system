@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 st.set_page_config(layout="wide")
 
@@ -6,6 +7,10 @@ st.title("🏦 Hedge Fund RL System")
 
 try:
     from engine import *
+
+    if ranking.empty:
+        st.warning("Carregando dados...")
+        st.stop()
 
     col1, col2, col3 = st.columns(3)
 
@@ -15,13 +20,11 @@ try:
 
     st.success(f"🚀 AÇÃO RECOMENDADA: COMPRAR {melhor_ativo_rl}")
 
-    st.markdown("---")
-
     tab1, tab2, tab3, tab4 = st.tabs([
         "📊 Ranking IA",
         "🤖 Portfólio RL",
         "💰 Performance",
-        "📈 Risco"
+        "📉 Risco"
     ])
 
     with tab1:
@@ -32,16 +35,23 @@ try:
         st.bar_chart(ranking_rl.set_index("Ativo"))
 
     with tab3:
-        if not performance.empty:
-            st.line_chart(performance["Patrimônio"])
-            st.line_chart(benchmark_vals)
-            st.dataframe(performance)
-        else:
+        if perf.empty:
             st.warning("Sem histórico ainda")
+        else:
+            st.line_chart(perf["Patrimonio"])
+
+            if len(bench) > 0:
+                df_compare = pd.DataFrame({
+                    "Sistema": perf["Patrimonio"],
+                    "Benchmark": bench
+                })
+                st.line_chart(df_compare)
+
+            st.dataframe(perf)
 
     with tab4:
         st.metric("📉 Volatilidade", round(volatilidade,4))
-        st.metric("⚠️ Drawdown", round(drawdown,4))
+        st.metric("⚠️ Drawdown Máx", round(drawdown,4))
 
 except Exception as e:
     st.error(f"Erro ao carregar sistema: {e}")
