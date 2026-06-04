@@ -207,17 +207,14 @@ carteira_real = st.session_state.carteira_memoria
 total_carteira_atual = sum([v["valor"] for v in carteira_real.values() if v["qtd"] > 0])
 renda_carteira_atual_estimada = 0.0
 
-# 🌪️ ANTICIPAÇÃO TÁTICA DA ENGINE: Calcula o Score antes do desenho da tabela
 if rodar or st.session_state.get("estrategia_pronta"):
     fiis_carteira_aux = [f"{t}.SA" for t in carteira_real.keys()]
     fiis_watchlist_aux = ["BTLG11.SA", "TRXF11.SA", "KNCR11.SA", "CPTS11.SA", "HGRU11.SA"]
     fiis_total_aux = list(set(fiis_carteira_aux + fiis_watchlist_aux))
     dy_base_aux = {t.replace(".SA", ""): dy_base_estatico.get(t.replace(".SA", ""), 0.095) for t in fiis_total_aux}
     
-    try:
-        df_mercado_aux = buscar_dados(fiis_total_aux, dy_base_aux)
-    except Exception:
-        df_mercado_aux = pd.DataFrame()
+    try: df_mercado_aux = buscar_dados(fiis_total_aux, dy_base_aux)
+    except Exception: df_mercado_aux = pd.DataFrame()
         
     if df_mercado_aux.empty:
         dados_resgate = []
@@ -235,83 +232,52 @@ for k, v in carteira_real.items():
     if v["qtd"] > 0:
         dy_historico_real = dy_base_estatico.get(k, 0.095)
         score_vif = 0.0
-        
         if df_ranking_global_vif is not None and not df_ranking_global_vif.empty:
             linha_s = df_ranking_global_vif[df_ranking_global_vif["Ativo"] == k]
             if not linha_s.empty:
-                # CORREÇÃO CRÍTICA: Adicionado índice [0] para extrair os escalares puros
                 score_vif = float(linha_s["Score"].values[0])
                 dy_historico_real = float(linha_s["DY_Anual"].values[0])
 
-        if dy_historico_real > 1.0:
-            dy_historico_real = dy_historico_real / 100
-
+        if dy_historico_real > 1.0: dy_historico_real = dy_historico_real / 100
         renda_individual_mes = (float(v["valor"]) * dy_historico_real) / 12
         renda_carteira_atual_estimada += renda_individual_mes
+        dados_carteira.append({"Ativo": k, "Quantidade": v["qtd"], "Valor (R$)": float(v["valor"]), "DY 12M Real": dy_historico_real, "Renda Estimada (Mês)": float(renda_individual_mes), "Score Inteligência": score_vif, "Variação 30 dias": float(variacao_30d_estatico.get(k, 0.0))})
 
-        dados_carteira.append({
-            "Ativo": k, 
-            "Quantidade": v["qtd"], 
-            "Valor (R$)": float(v["valor"]),
-            "DY 12M Real": dy_historico_real,
-            "Renda Estimada (Mês)": float(renda_individual_mes),
-            "Score Inteligência": score_vif,
-            "Variação 30 dias": float(variacao_30d_estatico.get(k, 0.0))
-        })
+if "data_inicio_contagem" not in st.session_state: st.session_state.data_inicio_contagem = (datetime.now() - timedelta(days=30)).strftime("%d/%m/%y")
 
-if "data_inicio_contagem" not in st.session_state:
-    st.session_state.data_inicio_contagem = (datetime.now() - timedelta(days=30)).strftime("%d/%m/%y")
-
+# 🎨 CSS ATUALIZADO: Adicionado white-space: nowrap para impedir quebra de linhas e sinais soltos
 st.markdown("""
     <style>
-        .stTabs [data-baseweb="tab-list"] { justify-content: center !important; gap: 48px; width: 100%; }
-        .stTabs [data-baseweb="tab"] p { font-size: 20px !important; font-weight: 700 !important; letter-spacing: 0.5px; }
-        .fii-table-wrapper { max-width: 85%; margin: 20px auto; font-family: 'Arial', sans-serif; border: 2.5px solid #000000 !important; border-radius: 4px; padding: 0px !important; }
-        .fii-table-wrapper table { width: 100%; border-collapse: collapse; margin: 0px !important; border: none !important; }
-        .fii-table-wrapper th { background-color: #0d47a1 !important; color: white !important; text-align: center !important; padding: 14px 18px !important; font-weight: 800 !important; font-size: 16px !important; border: 1.5px solid #000000 !important; }
-        .fii-table-wrapper td { padding: 14px 18px !important; font-size: 15px !important; font-weight: 700 !important; text-align: center !important; border: 1.5px solid #000000 !important; color: #000000 !important; }
-        .fii-table-wrapper table tr:last-of-type td { border-bottom: 2.5px solid #000000 !important; }
-        .fii-table-wrapper tr:nth-child(even) { background-color: #f8fafc !important; }
-        .fii-footer-container { max-width: 85%; margin: 0 auto 20px auto; font-family: 'Arial', sans-serif; }
-        .fii-footer-block { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 15px; width: 100%; }
+        .stTabs [data-baseweb="tab-list"] { justify-content: center !important; gap: 32px; width: 100%; }
+        .stTabs [data-baseweb="tab"] p { font-size: 16px !important; font-weight: 700 !important; }
+        .fii-table-wrapper { max-width: 90%; margin: 15px auto; border: 2px solid #000000 !important; border-radius: 4px; }
+        .fii-table-wrapper table { width: 100%; border-collapse: collapse; border: none !important; }
+        .fii-table-wrapper tr, .fii-table-wrapper td { border: none !important; border-bottom: 1.5px solid #000000 !important; }
+        .fii-table-wrapper th { background-color: #0d47a1 !important; color: white !important; text-align: center !important; padding: 10px 12px !important; font-weight: 800; font-size: 14px !important; border: 1.5px solid #000000 !important; }
+        .fii-table-wrapper td { padding: 10px 12px !important; font-size: 13px !important; font-weight: 700 !important; text-align: center !important; color: #000000 !important; white-space: nowrap !important; }
+        .fii-footer-container { max-width: 90%; margin: 0 auto 15px auto; }
+        .fii-footer-block { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; }
+        
+        @media (max-width: 768px) {
+            .stTabs [data-baseweb="tab-list"] { gap: 10px; flex-wrap: wrap; }
+            .stTabs [data-baseweb="tab"] p { font-size: 12px !important; }
+            .fii-table-wrapper { max-width: 100%; overflow-x: auto; }
+            .fii-table-wrapper th, .fii-table-wrapper td { padding: 6px 4px !important; font-size: 10px !important; border: none !important; white-space: nowrap !important; }
+            .fii-footer-block { flex-direction: column; gap: 8px; }
+        }
     </style>
 """, unsafe_allow_html=True)
 
 tab_arbitragem, tab_longo_prazo = st.tabs(["🔄 ARBITRAGEM & REBALANCEAMENTO", "📈 GESTÃO LONGO PRAZO"])
-
 with tab_arbitragem:
-    st.markdown("<h3 style='text-align: center; color: #0f172a; font-weight: 800; margin-top: 15px;'>💼 Distribuição Atual dos Ativos (ION)</h3>", unsafe_allow_html=True)
-    
+    st.markdown("<h3 style='text-align: center; color: #0f172a; font-weight: 800; margin-top: 10px; font-size: 20px;'>💼 Distribuição Atual dos Ativos (ION)</h3>", unsafe_allow_html=True)
     df_html_base = pd.DataFrame(dados_carteira)
+    if df_html_base["Score Inteligência"].sum() > 0: df_html_base = df_html_base.sort_values(by="Score Inteligência", ascending=False)
     
-    if df_html_base["Score Inteligência"].sum() > 0:
-        df_html_base = df_html_base.sort_values(by="Score Inteligência", ascending=False)
-    
-    def colorir_variacao(val):
-        color = '#dc2626' if val < 0 else '#000000'
-        return f'color: {color} !important; font-weight: 800;'
-
-    html_tabela_renderizada = (df_html_base.style
-                               .format({"Valor (R$)": "R$ {:,.2f}", "Renda Estimada (Mês)": "R$ {:,.2f}", "DY 12M Real": "{:.2%}", "Score Inteligência": "{:.2f} pts", "Variação 30 dias": "{:+.2f}%"})
-                               .map(colorir_variacao, subset=["Variação 30 dias"])
-                               .hide(axis="index")
-                               .to_html(placeholder=""))
-    
+    def colorir_variacao(val): return 'color: #dc2626 !important; font-weight: 800;' if val < 0 else 'color: #000000 !important; font-weight: 800;'
+    html_tabela_renderizada = (df_html_base.style.format({"Valor (R$)": "R$ {:,.2f}", "Renda Estimada (Mês)": "R$ {:,.2f}", "DY 12M Real": "{:.2%}", "Score Inteligência": "{:.2f} pts", "Variação 30 dias": "{:+.2f}%"}).map(colorir_variacao, subset=["Variação 30 dias"]).hide(axis="index").to_html(placeholder=""))
     st.markdown(f"<div class='fii-table-wrapper'>{html_tabela_renderizada}</div>", unsafe_allow_html=True)
-    
-    st.markdown(f"""
-    <div class='fii-footer-container'>
-        <div class='fii-footer-block'>
-            <div style='text-align: left;'>
-                <p style='font-size: 16px; font-weight: 800; color: #0f172a; margin: 0;'>Valor investido Atual: R$ {total_carteira_atual:,.2f}</p>
-                <p style='font-size: 18px; font-weight: 800; color: #166534; margin: 4px 0 0 0;'>Dividendo Estimado Total: R$ {renda_carteira_atual_estimada:,.2f} /mês</p>
-            </div>
-            <div style='text-align: right;'>
-                <p style='color: #000000; font-size: 14px; font-weight: 700; margin: 0;'>📅 Contagem iniciada em: {st.session_state.data_inicio_contagem}</p>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div class='fii-footer-container'><div class='fii-footer-block'><div style='text-align: left;'><p style='font-size: 14px; font-weight: 800; color: #0f172a; margin: 0;'>Valor investido Atual: R$ {total_carteira_atual:,.2f}</p><p style='font-size: 15px; font-weight: 800; color: #166534; margin: 2px 0 0 0;'>Dividendo Estimado Total: R$ {renda_carteira_atual_estimada:,.2f} /mês</p></div><div style='text-align: right;'><p style='color: #000000; font-size: 12px; font-weight: 700; margin: 0;'>📅 Contagem iniciada em: {st.session_state.data_inicio_contagem}</p></div></div></div>", unsafe_allow_html=True)
 
 fiis_carteira = [f"{t}.SA" for t in carteira_real.keys()]
 fiis_watchlist = ["BTLG11.SA", "TRXF11.SA", "KNCR11.SA", "CPTS11.SA", "HGRU11.SA"]
