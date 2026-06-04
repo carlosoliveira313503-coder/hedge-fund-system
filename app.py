@@ -420,12 +420,10 @@ with tab_arbitragem:
 
     st.markdown("<h3 style='text-align: center; font-weight: 800; color: #0f172a; margin-top: 20px; margin-bottom: 25px;'>📊 Análise Visual de Alocação de Risco</h3>", unsafe_allow_html=True)
 
-    # 🏢 TITULOS ATUALIZADOS: Adicionado o indicativo monetário (R$)
     ch1, ch2 = st.columns(2)
     with ch1: st.markdown("<p style='text-align: center; font-size: 16px; font-family: Arial; font-weight: bold; color: #0f172a; margin-bottom: -15px;'>Carteira Atual (R$)</p>", unsafe_allow_html=True)
     with ch2: st.markdown("<p style='text-align: center; font-size: 16px; font-family: Arial; font-weight: bold; color: #0f172a; margin-bottom: -15px;'>Carteira Sugerida (R$)</p>", unsafe_allow_html=True)
 
-    # 🛠️ AJUSTE ESTÉTICO PREMIUM: Formatação simplificada de milhar no padrão BR (ex: 11,8K)
     df_at["Valor_Milhar"] = df_at["Valor (R$)"] / 1000
     df_id["Alvo_Milhar"] = df_id["Valor_Alvo"] / 1000
     
@@ -436,13 +434,25 @@ with tab_arbitragem:
     with cg1:
         fig_at = px.bar(df_at, x="Valor_Milhar", y="Ativo", orientation="h", text="Texto_Simples_K", color="Ativo", color_discrete_map=mapa_cores_pdf)
         fig_at.update_traces(textposition="inside", textfont=dict(color="white", weight="bold"))
-        fig_at.update_layout(yaxis={'categoryorder': 'total ascending', 'title': None}, xaxis={'title': None, 'visible': False}, height=230, margin=dict(t=15, b=5, l=5, r=5), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_at, use_container_width=True, config={'displayModeBar': False})
+        # 🔒 TRAVAS ANTITOUCH: Desativa arrasto, zoom e fixa os eixos do gráfico atual
+        fig_at.update_layout(
+            yaxis={'categoryorder': 'total ascending', 'title': None, 'fixedrange': True}, 
+            xaxis={'title': None, 'visible': False, 'fixedrange': True}, 
+            dragmode=False, height=230, margin=dict(t=15, b=5, l=5, r=5), 
+            showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+        )
+        st.plotly_chart(fig_at, use_container_width=True, config={'displayModeBar': False, 'staticPlot': True})
     with cg2:
         fig_id = px.bar(df_id, x="Alvo_Milhar", y="Ativo", orientation="h", text="Texto_Alvo_Simples_K", color="Ativo", color_discrete_map=mapa_cores_pdf)
         fig_id.update_traces(textposition="inside", textfont=dict(color="white", weight="bold"))
-        fig_id.update_layout(yaxis={'categoryorder': 'total ascending', 'title': None, 'visible': False}, xaxis={'title': None, 'visible': False}, height=230, margin=dict(t=15, b=5, l=5, r=5), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_id, use_container_width=True, config={'displayModeBar': False})
+        # 🔒 TRAVAS ANTITOUCH: Desativa arrasto, zoom e fixa os eixos do gráfico sugerido
+        fig_id.update_layout(
+            yaxis={'categoryorder': 'total ascending', 'title': None, 'visible': False, 'fixedrange': True}, 
+            xaxis={'title': None, 'visible': False, 'fixedrange': True}, 
+            dragmode=False, height=230, margin=dict(t=15, b=5, l=5, r=5), 
+            showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+        )
+        st.plotly_chart(fig_id, use_container_width=True, config={'displayModeBar': False, 'staticPlot': True})
 
     valor_do_aporte_vif = float(st.session_state.get("input_aporte_dinamico", 0))
     target_swap_vif = float(st.session_state.get("target_arbitragem_dinamico", 15.0))
