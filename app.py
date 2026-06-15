@@ -10,7 +10,7 @@ from engine import calcular_score, construir_carteira, calcular_renda
 # Configuração da página para modo amplo (wide)
 st.set_page_config(layout="wide", page_title="Hedge Fund FIIs Pro")
 
-# CORREÇÃO: Título centralizado
+# Título centralizado
 st.markdown("<h1 style='text-align: center; color: #0f172a; font-weight: 900; margin-bottom: 20px;'>🏢 Hedge FII's 360° – Técnica & Inteligência Ativas</h1>", unsafe_allow_html=True)
 
 ARQUIVO_HISTORICO = "historico_planos_acao.csv"
@@ -56,20 +56,44 @@ for ativo_nome, info in st.session_state.carteira_memoria.items():
         yield_ativo = dy_base_estatico.get(ativo_nome, 0.095)
         renda_carteira_atual_estimada += (float(info["valor"]) * yield_ativo) / 12
 
+# CORREÇÃO: Função adaptada para salvar a separação da origem do dinheiro
 def executar_gravacao_manual():
     if st.session_state.get("dados_simulados") is not None:
-        sim_dados = st.session_state.dados_simulados
+        patrimonio_real_tela = sum([v["valor"] for v in st.session_state.carteira_memoria.values() if v["qtd"] > 0])
+        
+        # Coleta os dois campos distintos criados na barra lateral
+        aporte_bolso = float(st.session_state.get("input_aporte_bolso", 0))
+        dy_reinvestido = float(st.session_state.get("input_dy_reinvestido", 0))
+        
+        renda_correta_salvar = float(st.session_state.get("dados_simulados")["renda_aporte"])
+        if renda_correta_salvar > 10000.0:
+            renda_correta_salvar = float(st.session_state.get("dados_simulados")["renda_atual"])
+
         nova_execucao = pd.DataFrame([{
             "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Patrimônio Inicial": round(sim_dados["total_carteira_atual_v2"], 2),
-            "Aporte": st.session_state.input_aporte_dinamico,
-            "Renda Estimada Nova": round(sim_dados["renda_aporte"], 2)
+            "Patrimônio Inicial": round(patrimonio_real_tela, 2),
+            "Aporte Bolso": aporte_bolso,
+            "DY Reinvestido": dy_reinvestido,
+            "Renda Estimada Nova": round(renda_correta_salvar, 2)
         }])
+        
+        # Garante a escrita e preserva o cabeçalho se o arquivo for novo
         if os.path.exists(ARQUIVO_HISTORICO):
-            nova_execucao.to_csv(ARQUIVO_HISTORICO, mode='a', header=False, index=False)
+            try:
+                # Se o arquivo antigo tinha menos colunas, vamos ler e reescrever com as novas colunas
+                df_antigo = pd.read_csv(ARQUIVO_HISTORICO)
+                if "Aporte Bolso" not in df_antigo.columns:
+                    # Converte histórico antigo adaptando as colunas antigas de "Aporte" para "Aporte Bolso"
+                    df_antigo = df_antigo.rename(columns={"Aporte": "Aporte Bolso"})
+                    df_antigo["DY Reinvestido"] = 0.0
+                df_novo_consolidado = pd.concat([df_antigo, nova_execucao], ignore_index=True)
+                df_novo_consolidado.to_csv(ARQUIVO_HISTORICO, index=False)
+            except Exception:
+                nova_execucao.to_csv(ARQUIVO_HISTORICO, mode='a', header=False, index=False)
         else:
             nova_execucao.to_csv(ARQUIVO_HISTORICO, index=False)
-        st.toast("📊 Plano de ação aplicado e guardado com sucesso!", icon="💾")
+            
+        st.toast("📊 Histórico de Origem de Capital gravado!", icon="💾")
         st.session_state.estrategia_pronta = False
         st.session_state.dados_simulados = None
         st.rerun()
@@ -80,24 +104,19 @@ def executar_gravacao_manual():
 # ------------------------------------------------------------------------------
 # PROCESSAMENTO VISUAL E CONTROLE INTEGRADO DA BARRA LATERAL (MOLDURA INSTITUCIONAL)
 # ------------------------------------------------------------------------------
-# Injeção CSS cirúrgica com alvo direto nos componentes nativos de input numérico
 st.sidebar.markdown("""
     <style>
-        /* MIRA DIRETAMENTE NA ESTRUTURA COMPLETA DA CAIXA NUMÉRICA E DOS BOTÕES DE + E - */
         .stSidebar div[data-baseweb="input"] {
             border: 1.5px solid #000000 !important;
             border-radius: 6px !important;
             background-color: #ffffff !important;
         }
-        
-        /* Ajuste fino estrito para os expanders e estilos institucionais */
         .stSidebar [data-testid="stExpander"] { border: 1.5px solid #000000 !important; border-radius: 6px !important; background-color: #ffffff !important; margin-top: 12px; }
         .stSidebar [data-testid="stExpander"] summary { background-color: #f8fafc !important; border-left: 5px solid #0d47a1 !important; }
         .stSidebar [data-testid="stExpander"] summary p { font-size: 14px !important; font-weight: bold !important; color: #0f172a !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 1 - Cabeçalho Gestão OTV
 st.sidebar.markdown("""
     <div style='background-color: #0d47a1; padding: 12px; border: 2px solid #000000; border-radius: 6px; margin-bottom: 12px; text-align: center;'>
         <h2 style='color: white; margin: 0px; font-size: 20px; font-weight: bold;'>⚙️ Gestão OTV_0.18</h2>
@@ -106,10 +125,15 @@ st.sidebar.markdown("""
 
 carteira_real = st.session_state.carteira_memoria
 total_carteira_atual = sum([v["valor"] for v in carteira_real.values() if v["qtd"] > 0])
-aporte_novo_aux = st.session_state.get("input_aporte_dinamico", 0)
-patrimonio_total_futuro = total_carteira_atual + aporte_novo_aux
 
-# 2 - Patrimônio Atual
+# Captura os inputs de forma separada na interface
+aporte_bolso_aux = st.session_state.get("input_aporte_bolso", 0)
+dy_reinvestido_aux = st.session_state.get("input_dy_reinvestido", 0)
+
+# Unifica a soma total de dinheiro novo para as regras de cálculo do app
+st.session_state["input_aporte_dinamico"] = aporte_bolso_aux + dy_reinvestido_aux
+patrimonio_total_futuro = total_carteira_atual + st.session_state["input_aporte_dinamico"]
+
 st.sidebar.markdown(f"""
     <div style='background-color: #ffffff; border: 1.5px solid #000000; padding: 12px; border-radius: 6px; margin-bottom: 12px;'>
         <p style='margin: 0px; font-size: 13px; color: #64748b; font-weight: bold;'>💰 PATRIMÔNIO ATUAL</p>
@@ -117,22 +141,30 @@ st.sidebar.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 3 - Entre com novo aporte (Texto Simples seguido do Input Numérico)
+# Entrada 1: Dinheiro vindo do Bolso
 st.sidebar.markdown("""
     <div style='background-color: #f8fafc; padding: 10px; border: 1.5px solid #000000; border-radius: 6px 6px 0 0; border-bottom: none;'>
-        <span style='font-size: 13px; font-weight: bold; color: #0f172a;'>💸 ENTRE C/ NOVO APORTE:</span>
+        <span style='font-size: 13px; font-weight: bold; color: #0f172a;'>💸 APORTE NOVO (DO BOLSO):</span>
     </div>
 """, unsafe_allow_html=True)
-aporte_novo = st.sidebar.number_input("Valor do Aporte", label_visibility="collapsed", min_value=0, value=0, step=100, key="input_aporte_dinamico")
+st.sidebar.number_input("Valor do Bolso", label_visibility="collapsed", min_value=0, value=0, step=100, key="input_aporte_bolso")
+
+st.sidebar.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+
+# Entrada 2: Proventos Reinvestidos
+st.sidebar.markdown("""
+    <div style='background-color: #f8fafc; padding: 10px; border: 1.5px solid #000000; border-radius: 6px 6px 0 0; border-bottom: none;'>
+        <span style='font-size: 13px; font-weight: bold; color: #166534;'>🔁 REINVESTIR DY DO MÊS:</span>
+    </div>
+""", unsafe_allow_html=True)
+st.sidebar.number_input("Valor do Dividendo", label_visibility="collapsed", min_value=0, value=0, step=10, key="input_dy_reinvestido")
 
 st.sidebar.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
 
-# 4 - Rodar estratégia (Botão de Execução)
 rodar = st.sidebar.button("▶️ RODAR ESTRATÉGIA", key="btn_rodar_estrategia", type="primary", use_container_width=True)
 
 st.sidebar.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
 
-# 5 - Target de Swap (Texto Simples seguido do Input Numérico)
 st.sidebar.markdown("""
     <div style='background-color: #f8fafc; padding: 10px; border: 1.5px solid #000000; border-radius: 6px 6px 0 0; border-bottom: none;'>
         <span style='font-size: 13px; font-weight: bold; color: #0f172a;'>🎯 TARGET MÍNIMO SWAP:</span>
@@ -142,7 +174,6 @@ target_minimo_input = st.sidebar.number_input("Target Mínimo (R$)", label_visib
 
 st.sidebar.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
 
-# 6 - Patrimônio após aporte (C/ Nova Estratégia)
 st.sidebar.markdown(f"""
     <div style='background-color: #ebf3fc; border: 1.5px solid #000000; padding: 12px; border-radius: 6px; margin-bottom: 12px;'>
         <p style='margin: 0px; font-size: 13px; color: #1d4ed8; font-weight: bold;'>🔮 C/ NOVA ESTRATÉGIA</p>
@@ -157,11 +188,29 @@ st.sidebar.markdown(f"""
 # 7 - GESTÃO DE ATIVOS (SWAPS MANUAIS E EXPANSÃO REGISTRADA)
 # ------------------------------------------------------------------------------
 with st.sidebar.expander("💼 Gestão de Ativos (Ajustes Manuais)", expanded=False):
-    st.markdown("#### 🔢 Ajuste de Ativos")
+    st.markdown("#### 🔢 Ajuste de Ativos e Proventos")
+    
+    if "dy_real_inserido" not in st.session_state:
+        st.session_state.dy_real_inserido = {}
+        if "DY_Real_Cota" in df_carteira_salva.columns:
+            for _, r in df_carteira_salva.iterrows():
+                st.session_state.dy_real_inserido[r["Ativo"]] = float(r["DY_Real_Cota"]) if pd.notna(r["DY_Real_Cota"]) else 0.0
+
     for ativo, dados in list(st.session_state.carteira_memoria.items()):
-        nova_qtd = st.number_input(f"Cotas de {ativo}", min_value=0, value=dados["qtd"], step=1, key=f"edit_{ativo}")
+        st.markdown(f"**{ativo}**")
+        nova_qtd = st.number_input(f"Cotas de {ativo}", min_value=0, value=dados["qtd"], step=1, key=f"edit_{ativo}", label_visibility="collapsed")
+        
+        # AJUSTE: O campo agora recebe o VALOR TOTAL DO EXTRATO e calcula o proporcional por cota
+        valor_dy_por_cota_antigo = st.session_state.dy_real_inserido.get(ativo, 0.0)
+        valor_total_antigo_estimado = valor_dy_por_cota_antigo * nova_qtd if nova_qtd > 0 else 0.0
+        
+        novo_valor_total_extrato = st.number_input(f"Rendimento Total Recebido (R$) - {ativo}", min_value=0.0, value=float(valor_total_antigo_estimado), step=1.0, format="%.2f", key=f"extrato_total_{ativo}")
+        
         st.session_state.carteira_memoria[ativo]["qtd"] = nova_qtd
         st.session_state.carteira_memoria[ativo]["valor"] = nova_qtd * precos_base_estatico.get(ativo, 100.0)
+        
+        # Guarda na memória o valor por cota calculado de forma invisível
+        st.session_state.dy_real_inserido[ativo] = (novo_valor_total_extrato / nova_qtd) if nova_qtd > 0 else 0.0
 
     st.markdown("<hr style='margin: 10px 0;'>#### 🔀 Migração Direta", unsafe_allow_html=True)
     lista_ativos_disponiveis = list(st.session_state.carteira_memoria.keys())
@@ -188,14 +237,23 @@ with st.sidebar.expander("💼 Gestão de Ativos (Ajustes Manuais)", expanded=Fa
     if st.button("➕ Inserir Ativo", key="btn_adicionar_fii", use_container_width=True):
         if novo_ticker and novo_ticker not in st.session_state.carteira_memoria:
             st.session_state.carteira_memoria[novo_ticker] = {"qtd": nova_qtd_fii, "valor": nova_qtd_fii * precos_base_estatico.get(novo_ticker, 100.0)}
+            st.session_state.dy_real_inserido[novo_ticker] = 0.0
             st.toast(f"FII {novo_ticker} inserido!", icon="➕")
             st.rerun()
 
     st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
     if st.button("💾 Salvar Alterações", key="btn_salvar_carteira_disco", use_container_width=True):
-        novos_dados_salvar = [{"Ativo": k, "Quantidade": v["qtd"], "Valor (R$)": v["valor"]} for k, v in st.session_state.carteira_memoria.items() if v["qtd"] > 0 or k == novo_ticker]
+        novos_dados_salvar = []
+        for k, v in st.session_state.carteira_memoria.items():
+            if v["qtd"] > 0 or k == novo_ticker:
+                novos_dados_salvar.append({
+                    "Ativo": k, 
+                    "Quantidade": v["qtd"], 
+                    "Valor (R$)": v["valor"],
+                    "DY_Real_Cota": st.session_state.dy_real_inserido.get(k, 0.0)
+                })
         pd.DataFrame(novos_dados_salvar).to_csv(ARQUIVO_CARTEIRA, index=False)
-        st.toast("✅ Arquivo de carteira updated com sucesso!", icon="📝")
+        st.toast("✅ Arquivo de carteira e proventos atualizados com sucesso!", icon="📝")
         st.rerun()
 # ==============================================================================
 # 🛑 FIM DO BLOCO 3 DE 9
@@ -228,6 +286,10 @@ else:
     df_ranking_global_vif = pd.DataFrame()
 
 dados_carteira = []
+dy_reais_memoria = st.session_state.get("dy_real_inserido", {})
+total_prevista_col = 0.0
+total_real_col = 0.0
+
 for k, v in carteira_real.items():
     if v["qtd"] > 0:
         dy_historico_real = dy_base_estatico.get(k, 0.095)
@@ -239,45 +301,109 @@ for k, v in carteira_real.items():
                 dy_historico_real = float(linha_s["DY_Anual"].values[0])
 
         if dy_historico_real > 1.0: dy_historico_real = dy_historico_real / 100
-        renda_individual_mes = (float(v["valor"]) * dy_historico_real) / 12
-        renda_carteira_atual_estimada += renda_individual_mes
-        dados_carteira.append({"Ativo": k, "Quantidade": v["qtd"], "Valor (R$)": float(v["valor"]), "DY 12M Real": dy_historico_real, "Renda Estimada (Mês)": float(renda_individual_mes), "Score Inteligência": score_vif, "Variação 30 dias": float(variacao_30d_estatico.get(k, 0.0))})
+        
+        renda_prevista_calculada = (float(v["valor"]) * dy_historico_real) / 12
+        total_prevista_col += renda_prevista_calculada
+        
+        if dy_reais_memoria.get(k, 0.0) > 0:
+            renda_real_individual = float(v["qtd"] * dy_reais_memoria[k])
+            renda_soma_final = renda_real_individual
+        else:
+            renda_real_individual = 0.0
+            renda_soma_final = renda_prevista_calculada
+            
+        total_real_col += renda_real_individual
+        renda_carteira_atual_estimada += renda_soma_final
+        dados_carteira.append({
+            "Ativo": k, "Quantidade": v["qtd"], "Valor (R$)": float(v["valor"]), 
+            "Renda Prevista (+30 dias)": float(renda_prevista_calculada),
+            "Renda Real": float(renda_real_individual),
+            "Score Inteligência": score_vif, "Variação 30 dias": float(variacao_30d_estatico.get(k, 0.0))
+        })
 
 if "data_inicio_contagem" not in st.session_state: st.session_state.data_inicio_contagem = (datetime.now() - timedelta(days=30)).strftime("%d/%m/%y")
 
-# 🎨 CSS ATUALIZADO: Adicionado white-space: nowrap para impedir quebra de linhas e sinais soltos
+# CSS ATUALIZADO: Suporte para bordas nas células e destaque em negrito para a linha de TOTAL
 st.markdown("""
     <style>
         .stTabs [data-baseweb="tab-list"] { justify-content: center !important; gap: 32px; width: 100%; }
         .stTabs [data-baseweb="tab"] p { font-size: 16px !important; font-weight: 700 !important; }
         .fii-table-wrapper { max-width: 90%; margin: 15px auto; border: 2px solid #000000 !important; border-radius: 4px; }
         .fii-table-wrapper table { width: 100%; border-collapse: collapse; border: none !important; }
-        .fii-table-wrapper tr, .fii-table-wrapper td { border: none !important; border-bottom: 1.5px solid #000000 !important; }
+        .fii-table-wrapper tr { border-bottom: 1.5px solid #000000 !important; }
         .fii-table-wrapper th { background-color: #0d47a1 !important; color: white !important; text-align: center !important; padding: 10px 12px !important; font-weight: 800; font-size: 14px !important; border: 1.5px solid #000000 !important; }
-        .fii-table-wrapper td { padding: 10px 12px !important; font-size: 13px !important; font-weight: 700 !important; text-align: center !important; color: #000000 !important; white-space: nowrap !important; }
+        .fii-table-wrapper td { padding: 10px 12px !important; font-size: 13px !important; font-weight: 700 !important; text-align: center !important; color: #000000 !important; white-space: nowrap !important; border: 1px solid #cbd5e1 !important; }
+        
+        /* Destaca visualmente a última linha da tabela (Totais) */
+        .fii-table-wrapper table tr:last-child td { background-color: #f8fafc !important; font-weight: 900 !important; font-size: 14px !important; border-top: 2px solid #000000 !important; color: #0f172a !important; }
+        
         .fii-footer-container { max-width: 90%; margin: 0 auto 15px auto; }
         .fii-footer-block { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; }
-        
-        @media (max-width: 768px) {
-            .stTabs [data-baseweb="tab-list"] { gap: 10px; flex-wrap: wrap; }
-            .stTabs [data-baseweb="tab"] p { font-size: 12px !important; }
-            .fii-table-wrapper { max-width: 100%; overflow-x: auto; }
-            .fii-table-wrapper th, .fii-table-wrapper td { padding: 6px 4px !important; font-size: 10px !important; border: none !important; white-space: nowrap !important; }
-            .fii-footer-block { flex-direction: column; gap: 8px; }
-        }
     </style>
 """, unsafe_allow_html=True)
 
-tab_arbitragem, tab_longo_prazo = st.tabs(["🔄 ARBITRAGEM & REBALANCEAMENTO", "📈 GESTÃO LONGO PRAZO"])
+tab_arbitragem, tab_longo_prazo, tab_historico = st.tabs(["🔄 ARBITRAGEM & REBALANCEAMENTO", "📈 GESTÃO LONGO PRAZO", "📜 HISTÓRICO DE EVOLUÇÃO"])
+
 with tab_arbitragem:
     st.markdown("<h3 style='text-align: center; color: #0f172a; font-weight: 800; margin-top: 10px; font-size: 20px;'>💼 Distribuição Atual dos Ativos (ION)</h3>", unsafe_allow_html=True)
     df_html_base = pd.DataFrame(dados_carteira)
     if df_html_base["Score Inteligência"].sum() > 0: df_html_base = df_html_base.sort_values(by="Score Inteligência", ascending=False)
     
-    def colorir_variacao(val): return 'color: #dc2626 !important; font-weight: 800;' if val < 0 else 'color: #000000 !important; font-weight: 800;'
-    html_tabela_renderizada = (df_html_base.style.format({"Valor (R$)": "R$ {:,.2f}", "Renda Estimada (Mês)": "R$ {:,.2f}", "DY 12M Real": "{:.2%}", "Score Inteligência": "{:.2f} pts", "Variação 30 dias": "{:+.2f}%"}).map(colorir_variacao, subset=["Variação 30 dias"]).hide(axis="index").to_html(placeholder=""))
+    # INJEÇÃO CRÍTICA: Insere a linha de fechamento de totais com travas para colunas não financeiras
+    linha_totais = pd.DataFrame([{
+        "Ativo": "TOTAL", "Quantidade": "-", "Valor (R$)": total_carteira_atual,
+        "Renda Prevista (+30 dias)": total_prevista_col, "Renda Real": total_real_col,
+        "Score Inteligência": "-", "Variação 30 dias": "-"
+    }])
+    df_html_base = pd.concat([df_html_base, linha_totais], ignore_index=True)
+    
+    def colorir_variacao(val): return 'color: #dc2626 !important; font-weight: 800;' if type(val) == float and val < 0 else 'color: #000000 !important; font-weight: 800;'
+    
+    # Formatação condicional travada apenas para os valores numéricos válidos
+    html_tabela_renderizada = (df_html_base.style.format({
+        "Valor (R$)": lambda x: f"R$ {x:,.2f}" if type(x) in [int, float] else x,
+        "Renda Prevista (+30 dias)": lambda x: f"R$ {x:,.2f}" if type(x) in [int, float] else x,
+        "Renda Real": lambda x: f"R$ {x:,.2f}" if type(x) in [int, float] else x,
+        "Score Inteligência": lambda x: f"{x:.2f} pts" if type(x) in [int, float] else x,
+        "Variação 30 dias": lambda x: f"{x:+.2f}%" if type(x) in [int, float] else x
+    }).map(colorir_variacao, subset=["Variação 30 dias"]).hide(axis="index").to_html(placeholder=""))
+    
     st.markdown(f"<div class='fii-table-wrapper'>{html_tabela_renderizada}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='fii-footer-container'><div class='fii-footer-block'><div style='text-align: left;'><p style='font-size: 14px; font-weight: 800; color: #0f172a; margin: 0;'>Valor investido Atual: R$ {total_carteira_atual:,.2f}</p><p style='font-size: 15px; font-weight: 800; color: #166534; margin: 2px 0 0 0;'>Dividendo Estimado Total: R$ {renda_carteira_atual_estimada:,.2f} /mês</p></div><div style='text-align: right;'><p style='color: #000000; font-size: 12px; font-weight: 700; margin: 0;'>📅 Contagem iniciada em: {st.session_state.data_inicio_contagem}</p></div></div></div>", unsafe_allow_html=True)
+    
+    st.markdown(f"""
+        <div class='fii-footer-container'>
+            <div class='fii-footer-block'>
+                <div style='text-align: left;'>
+                    <p style='font-size: 15px; font-weight: 800; color: #166534; margin: 0;'>📊 Renda Combinada Disponível: R$ {renda_carteira_atual_estimada:,.2f} /mês</p>
+                </div>
+                <div style='text-align: right;'>
+                    <p style='color: #000000; font-size: 12px; font-weight: 700; margin: 0;'>📅 Contagem iniciada em: {st.session_state.data_inicio_contagem}</p>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with tab_historico:
+    st.markdown("<h3 style='text-align: center; color: #0f172a; font-weight: 800; margin-top: 10px;'>📊 Evolução de Patrimônio & Proventos Gravados</h3>", unsafe_allow_html=True)
+    if os.path.exists(ARQUIVO_HISTORICO):
+        df_hist_leitura = pd.read_csv(ARQUIVO_HISTORICO)
+        if not df_hist_leitura.empty:
+            ch_h1, ch_h2 = st.columns(2)
+            with ch_h1:
+                fig_hist_patr = px.line(df_hist_leitura, x="Data", y="Patrimônio Inicial", title="Crescimento Patrimonial (R$)", markers=True, color_discrete_sequence=["#0d47a1"])
+                fig_hist_patr.update_layout(height=280, margin=dict(t=35, b=10, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_hist_patr, use_container_width=True, config={'displayModeBar': False})
+            with ch_h2:
+                fig_hist_renda = px.bar(df_hist_leitura, x="Data", y="Renda Estimada Nova", title="Histórico de Renda Consolidada (R$)", color_discrete_sequence=["#166534"])
+                fig_hist_renda.update_layout(height=280, margin=dict(t=35, b=10, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_hist_renda, use_container_width=True, config={'displayModeBar': False})
+            
+            st.markdown("#### 📝 Registros Salvos no Banco de Dados")
+            st.dataframe(df_hist_leitura.sort_values(by="Data", ascending=False), use_container_width=True, hide_index=True)
+        else:
+            st.info("ℹ️ O arquivo de histórico está criado, mas ainda não possui nenhum registro guardado.")
+    else:
+        st.warning("⚠️ Nenhum arquivo de histórico encontrado no disco. Clique em 'Gravar Histórico' para inaugurar os registros.")
 
 fiis_carteira = [f"{t}.SA" for t in carteira_real.keys()]
 fiis_watchlist = ["BTLG11.SA", "TRXF11.SA", "KNCR11.SA", "CPTS11.SA", "HGRU11.SA"]
@@ -322,7 +448,6 @@ for ativo_nome, info in carteira_real.items():
     if info["qtd"] > 0:
         linha_m = df_ranking_completo[df_ranking_completo["Ativo"] == ativo_nome]
         
-        # 🛡️ CORREÇÃO CRÍTICA: Adicionado o índice [0] para extrair escalares puros e evitar TypeErrors
         preco_de_tela = float(linha_m["Preco"].values[0]) if not linha_m.empty else precos_base_estatico.get(ativo_nome, 100.0)
         var_valor = float(linha_m["Variacao"].values[0]) if not linha_m.empty and "Variacao" in linha_m.columns else variacao_30d_estatico.get(ativo_nome, 0.0)
         dy_ativo_vif = float(linha_m["DY_Anual"].values[0]) if not linha_m.empty else dy_base_estatico.get(ativo_nome, 0.095)
@@ -330,7 +455,6 @@ for ativo_nome, info in carteira_real.items():
         if dy_ativo_vif > 1.0: dy_ativo_vif = dy_ativo_vif / 100
         valor_financeiro_viva = info["qtd"] * preco_de_tela
         
-        # 🛡️ TRAVA REALISTA: Corrige distorções de ponto decimal flutuante herdadas do cache do MXRF11
         if ativo_nome == "MXRF11" and valor_financeiro_viva > 50000.0:
             valor_financeiro_viva = valor_financeiro_viva / 10
             
@@ -342,7 +466,9 @@ for ativo_nome, info in carteira_real.items():
 
 df_ranking_carteira = df_ranking_completo[df_ranking_completo["Ativo"].isin(ativos_carteira_nome)].copy()
 df_carteira_atual_v2 = pd.DataFrame(dados_carteira_v2)
-total_carteira_atual_v2 = df_carteira_atual_v2["Valor (R$)"].sum()
+
+# Sincroniza o patrimônio atual real diretamente com o estado de memória unificado
+total_carteira_atual_v2 = sum([v["valor"] for v in carteira_real.values() if v["qtd"] > 0])
 valor_aporte_capturado = float(st.session_state.get("input_aporte_dinamico", 0))
 patrimonio_total_futuro_v2 = total_carteira_atual_v2 + valor_aporte_capturado
 
@@ -350,13 +476,15 @@ df_ideal_bruto = construir_carteira(df_ranking_carteira, patrimonio_total_futuro
 
 ganho_swap_real = 14.13
 target_swap_vif = float(st.session_state.get("target_arbitragem_dinamico", 15.0))
+swap_aprovado_final = st.session_state.get("swap_aprovado_global", False)
 
-if valor_aporte_capturado == 0 and ganho_swap_real < target_swap_vif:
+# CORREÇÃO DA TRAVA: Se tiver aporte ou swap aprovado, usa o cálculo ideal do motor sem congelar valores
+if valor_aporte_capturado > 0 or swap_aprovado_final:
+    df_ideal = df_ideal_bruto.copy()
+else:
     df_ideal = df_carteira_atual_v2[["Ativo"]].copy()
     df_ideal = df_ideal.merge(df_ideal_bruto.drop(columns=["Alocacao_Ajustada"], errors="ignore"), on="Ativo", how="left")
     df_ideal["Alocacao_Ajustada"] = df_carteira_atual_v2["Valor (R$)"].values
-else:
-    df_ideal = df_ideal_bruto.copy()
 
 _, renda_com_aporte = calcular_renda(df_ideal)
 
@@ -442,12 +570,15 @@ with tab_arbitragem:
         capital_swap_simulado = cotas_venda_sug * p_venda
         cotas_compra_sug = int(capital_swap_simulado / p_compra)
         
-        # 📈 CÁLCULO 100% DINÂMICO DO PRÊMIO DE ARBITRAGEM (B3)
         renda_venda_perdida = (capital_swap_simulado * dy_venda) / 12
         renda_compra_ganha = ((cotas_compra_sug * p_compra) * dy_compra) / 12
         ganho_swap_real = max(0.0, renda_compra_ganha - renda_venda_perdida)
         
-        if ganho_swap_real >= target_swap_vif:
+        # Sincronização com o estado global para validação no Bloco 8
+        swap_aprovado = ganho_swap_real >= target_swap_vif
+        st.session_state["swap_aprovado_global"] = swap_aprovado
+        
+        if swap_aprovado:
             texto_swap_dinamico = f"""🟢 <b>Swap Altamente Recomendado (Target Atingido)</b>.<br><br>
             • <b>Reduzir Posição (Venda):</b> Diminuir <b>{cotas_venda_sug} cotas</b> de <b>HGLG11</b> (R$ {p_venda:.2f}/un)<br>
             • <b>Aumentar Posição (Compra):</b> Adicionar <b>{cotas_compra_sug} cotas</b> de <b>KNCR11</b> (R$ {p_compra:.2f}/un)<br><br>
@@ -483,28 +614,23 @@ with tab_arbitragem:
 # ==============================================================================
 # 🛑 FIM DO BLOCO 7 DE 9
 # ==============================================================================
-    # 💵 HERDA O CÁLCULO DINÂMICO PARA SINCRONIZAÇÃO ABSOLUTA DO REBALANCEAMENTO
+    # HERDA O CÁLCULO DINÂMICO PARA SINCRONIZAÇÃO ABSOLUTA DO REBALANCEAMENTO
     linha_venda = df_ranking_completo[df_ranking_completo["Ativo"] == "HGLG11"]
     p_venda = float(linha_venda["Preco"].values[0]) if not linha_venda.empty else 156.20
-    dy_venda = float(linha_venda["DY_Anual"].values[0]) if not linha_venda.empty else 0.091
-    if dy_venda > 1.0: dy_venda = dy_venda / 100
     
     linha_compra = df_ranking_completo[df_ranking_completo["Ativo"] == "KNCR11"]
     p_compra = float(linha_compra["Preco"].values[0]) if not linha_compra.empty else 104.90
-    dy_compra = float(linha_compra["DY_Anual"].values[0]) if not linha_compra.empty else 0.118
-    if dy_compra > 1.0: dy_compra = dy_compra / 100
 
     cotas_venda_sug = 10
     capital_origem_swap = cotas_venda_sug * p_venda
     cotas_compra_sug = int(capital_origem_swap / p_compra)
     
-    renda_venda_perdida = (capital_origem_swap * dy_venda) / 12
-    renda_compra_ganha = ((cotas_compra_sug * p_compra) * dy_compra) / 12
-    ganho_swap_real = max(0.0, renda_compra_ganha - renda_venda_perdida)
+    swap_aprovado_final = st.session_state.get("swap_aprovado_global", False)
+    sim_dados = st.session_state.get("dados_simulados")
 
-    if valor_do_aporte_vif > 0 or ganho_swap_real >= target_swap_vif:
+    if valor_do_aporte_vif > 0 or swap_aprovado_final:
         lista_cotas_comprar = []
-        capital_real_swap_ativo = capital_origem_swap if (ganho_swap_real >= target_swap_vif) else 0.0
+        capital_real_swap_ativo = capital_origem_swap if swap_aprovado_final else 0.0
         orcamento_total_compras = valor_do_aporte_vif + capital_real_swap_ativo
         
         if valor_do_aporte_vif == 0 and capital_real_swap_ativo > 0:
@@ -514,24 +640,54 @@ with tab_arbitragem:
             if capital_real_swap_ativo > 0:
                 lista_cotas_comprar.append(f"■ Executar Origem do Swap: Reduzir <b>{cotas_venda_sug} cotas</b> de HGLG11 (Gera R$ {capital_real_swap_ativo:,.2f})")
             
-            soma_alocacao_alvo = df_id["Valor_Alvo"].sum()
-            for _, r in df_id.iterrows():
+            # CORREÇÃO CRÍTICA: Força o Bloco 8 a recalcular a carteira alvo com o patrimônio futuro atualizado do Bloco 5
+            patrimonio_alvo_calculo = sim_dados["patrimonio_total_futuro_v2"] if sim_dados else (total_carteira_atual + valor_do_aporte_vif)
+            df_ideal_atualizado = construir_carteira(df_ranking_carteira, patrimonio_alvo_calculo)
+            
+            soma_alocacao_alvo = df_ideal_atualizado["Alocacao_Ajustada"].sum() if "Alocacao_Ajustada" in df_ideal_atualizado.columns else df_ideal_atualizado["Valor_Alvo"].sum()
+            col_valor_alvo = "Alocacao_Ajustada" if "Alocacao_Ajustada" in df_ideal_atualizado.columns else "Valor_Alvo"
+            
+            compras_temporarias = {}
+            saldo_restante = orcamento_total_compras
+            
+            # Passo 1: Distribuição proporcional inicial baseada no novo cálculo
+            for _, r in df_ideal_atualizado.iterrows():
+                if not swap_aprovado_final and r["Ativo"] == "HGLG11":
+                    continue
                 if soma_alocacao_alvo > 0:
-                    percentual_ideal_ativo = r["Valor_Alvo"] / soma_alocacao_alvo
-                    capital_proporcional_alocado = orcamento_total_compras * percentual_ideal_ativo
-                    preco_fii = float(r["Preco"]) if float(r["Preco"]) > 0 else 100.0
-                    qtd_cotas_sugeridas = int(capital_proporcional_alocado / preco_fii)
+                    percentual_ideal_ativo = r[col_valor_alvo] / soma_alocacao_alvo
+                    capital_proporcional = orcamento_total_compras * percentual_ideal_ativo
                     
-                    if qtd_cotas_sugeridas > 0:
-                        custo_aproximado = qtd_cotas_sugeridas * preco_fii
-                        lista_cotas_comprar.append(f"■ Destinação de Capital: Comprar <b>{qtd_cotas_sugeridas} cotas</b> de <b>{r['Ativo']}</b> (Valor aproximado = R$ {custo_aproximado:,.2f})")
+                    # Busca o preço real do ativo no ranking do mercado atual usando [0] com segurança
+                    linha_fii_preco = df_ranking_completo[df_ranking_completo["Ativo"] == r["Ativo"]]
+                    preco_fii = float(linha_fii_preco["Preco"].values[0]) if not linha_fii_preco.empty else precos_base_estatico.get(r["Ativo"], 100.0)
+                    
+                    qtd_inicial = int(capital_proporcional / preco_fii)
+                    compras_temporarias[r["Ativo"]] = {"qtd": qtd_inicial, "preco": preco_fii}
+                    saldo_restante -= (qtd_inicial * preco_fii)
+            
+            # Passo 2: Distribuição dos resíduos usando o índice correto da tupla x[1]
+            ativos_ordenados_preco = sorted(compras_temporarias.items(), key=lambda x: x[1]["preco"])
+            for ativo_nome, info in ativos_ordenados_preco:
+                if saldo_restante >= info["preco"]:
+                    cotas_a_mais = int(saldo_restante / info["preco"])
+                    compras_temporarias[ativo_nome]["qtd"] += cotas_a_mais
+                    saldo_restante -= (cotas_a_mais * info["preco"])
+            
+            # Passo 3: Montagem das mensagens visuais
+            custo_total_realizado = 0.0
+            for ativo_nome, info in compras_temporarias.items():
+                if info["qtd"] > 0:
+                    custo_fii = info["qtd"] * info["preco"]
+                    custo_total_realizado += custo_fii
+                    lista_cotas_comprar.append(f"■ Destinação de Capital: Comprar <b>{info['qtd']} cotas</b> de <b>{ativo_nome}</b> (Valor aproximado = R$ {custo_fii:,.2f})")
                         
         texto_cotas_final = "<br>".join(lista_cotas_comprar) if lista_cotas_comprar else "Ajuste financeiro abaixo do preço de 1 cota de tela."
-        texto_rebalanceamento = f"🎯 <b>Gatilho de Rebalanceamento ATIVADO!</b> Operações travadas rigorosamente dentro do saldo disponível de R$ {orcamento_total_compras:,.2f}:<br><br>{texto_cotas_final}"
+        texto_rebalanceamento = f"🎯 <b>Gatilho de Rebalanceamento ATIVADO!</b> Operações otimizadas para uso máximo do saldo. Total Alocado: R$ {custo_total_realizado:,.2f} de R$ {orcamento_total_compras:,.2f}:<br><br>{texto_cotas_final}"
     else:
-        texto_rebalanceamento = f"ℹ️ <b>Nenhum rebalanceamento sugerido.</b> Como a eficiência tática de arbitragem projetada de R$ {ganho_swap_real:.2f} não atingiu o target de R$ {target_swap_vif:.2f} e nenhum aporte novo foi injetado, a recomendação oficial é manter a estrutura atual intocada."
+        texto_rebalanceamento = f"ℹ️ <b>Nenhum rebalanceamento sugerido.</b> Como a eficiência tática de arbitragem projetada não atingiu o target e nenhum aporte novo foi injetado, a recomendação oficial é manter a estrutura atual intocada."
         
-    st.markdown(f"<div style='background-color: #ebf3fc; border-left: 6px solid #0d47a1; padding: 16px; border-radius: 4px; margin-bottom: 20px;'><p style='color: #1e3a8a; margin: 0; font-size: 16px; font-weight: bold; line-height: 1.7;'>{texto_rebalanceamento}</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background-color: #ebf3fc; border-left: 6px solid #0d47a1; padding: 16px; border-radius: 4px; margin-bottom: 20px;'><p style='color: #1e3a8a; font-size: 16px; font-weight: bold; line-height: 1.7;'>{texto_rebalanceamento}</p></div>", unsafe_allow_html=True)
 
     c_btn1, c_btn2 = st.columns(2)
     with c_btn1: st.button("📄 Gravar ESSE Histórico do App", key="btn_confirmar_plano", use_container_width=True, on_click=executar_gravacao_manual)
@@ -545,24 +701,20 @@ with tab_arbitragem:
 # ------------------------------------------------------------------------------
 with tab_longo_prazo:
     st.markdown("<h2 style='text-align: center; font-size: 30px; font-weight: 900; color: #0f172a; margin-top: 10px; margin-bottom: 25px;'>📈 Simulador de Renda Futura & Efeito Bola de Neve</h2>", unsafe_allow_html=True)
-    # 🎨 CSS OTIMIZADO: Ajuste fino de paddings e fontes para ocupação máxima do espaço útil
     st.markdown("<style>.box-simulador { padding: 10px 14px; border-radius: 6px; min-height: 90px; display: flex; flex-direction: column; justify-content: center; text-align: center; border: 1.5px solid #000000 !important; }.box-azul { background-color: #ebf3fc; }.box-vermelho { background-color: #fdf2f2; }.box-verde { background-color: #e6fffa; }.lbl-sim { font-size: 16px; font-weight: bold; margin: 0; letter-spacing: 0.5px; }.val-sim { font-size: 30px; font-weight: 900; margin: 2px 0 0 0; }</style>", unsafe_allow_html=True)
     
     sim_dados = st.session_state.dados_simulados
     patrimonio_inicial_real = float(sim_dados["patrimonio_total_futuro_v2"]) if sim_dados is not None else float(total_carteira_atual)
-    div_mensal_inicial = float(sim_dados["renda_aporte"]) if sim_dados is not None else float(renda_carteira_atual_estimada)
     
-    if sim_dados is not None and "df_carteira_atual_v2" in sim_dados:
-        df_calculo_dy = sim_dados["df_carteira_atual_v2"]
-        if "DY_Anual_Vif" in df_calculo_dy.columns and patrimonio_inicial_real > 0:
-            yield_ponderado_cru = float((df_calculo_dy["Valor (R$)"] * df_calculo_dy["DY_Anual_Vif"]).sum() / df_calculo_dy["Valor (R$)"].sum())
-        else:
-            yield_ponderado_cru = (div_mensal_inicial * 12) / patrimonio_inicial_real if patrimonio_inicial_real > 0 else 0.11217
+    # REGRA DE OURO: O simulador assume a renda unificada (que prioriza o seu lançamento real)
+    div_mensal_inicial = float(renda_carteira_atual_estimada)
+    
+    # Cálculo da taxa anual com base na média real dos proventos lançados por você
+    if patrimonio_inicial_real > 0:
+        yield_real_fiel = (div_mensal_inicial * 12) / patrimonio_inicial_real
     else:
-        yield_ponderado_cru = (div_mensal_inicial * 12) / patrimonio_inicial_real if patrimonio_inicial_real > 0 else 0.11217
-
-    if yield_ponderado_cru > 1.0: yield_ponderado_cru = yield_ponderado_cru / 100
-    yield_real_fiel = yield_ponderado_cru
+        yield_real_fiel = 0.105  # Protetor de segurança caso a carteira esteja zerada
+        
     taxa_mensal = (1 + yield_real_fiel) ** (1/12) - 1
     
     anos_eixo = [2.5, 5.0, 7.5, 10.0, 12.0, 14.0, 16.0, 18.0]
@@ -570,7 +722,8 @@ with tab_longo_prazo:
     for t_anos in anos_eixo:
         meses = int(t_anos * 12)
         patr_acumulado = patrimonio_inicial_real
-        for _ in range(meses): patr_acumulado += (patr_acumulado * taxa_mensal)
+        for _ in range(meses): 
+            patr_acumulado += (patr_acumulado * taxa_mensal)
         lista_patr.append(round(patr_acumulado, 2))
         lista_prov.append(round(patr_acumulado * taxa_mensal, 2))
         
@@ -596,7 +749,7 @@ with tab_longo_prazo:
     
     cl4, cl5, cl6 = st.columns(3)
     with cl4: st.markdown(f"<div class='box-simulador box-azul'><p class='lbl-sim' style='color:#1e40af;'>💸 RENDA MENSAL (18 ANOS)</p><p class='val-sim' style='color:#1e3a8a;'>R$ {renda_mensal_projetada_18:,.2f}</p></div>", unsafe_allow_html=True)
-    with cl5: st.markdown(f"<div class='box-simulador box-vermelho'><p class='lbl-sim' style='color:#9b2c2c;'>💰 PATRIMÔNIO (18 ANOS)</p><p class='val-sim' style='color:#742a2a;'>R$ {patrimonio_projetado_18:,.2f}</p><span style='color:#9b2c2c; font-size:12px; font-weight:bold;'>DY Carteira: {yield_real_fiel*100:.2f}% a.a.</span></div>", unsafe_allow_html=True)
+    with cl5: st.markdown(f"<div class='box-simulador box-vermelho'><p class='lbl-sim' style='color:#9b2c2c;'>💰 PATRIMÔNIO (18 ANOS)</p><p class='val-sim' style='color:#742a2a;'>R$ {patrimonio_projetado_18:,.2f}</p><span style='color:#9b2c2c; font-size:12px; font-weight:bold;'>DY Médio Real: {yield_real_fiel*100:.2f}% a.a.</span></div>", unsafe_allow_html=True)
     with cl6: st.markdown(f"<div class='box-simulador box-verde'><p class='lbl-sim' style='color:#234e52;'>🏁 META ATINGIDA EM:</p><p class='val-sim' style='color:#1d4044;'>{anos_meta}a e {restante_meses}m</p></div>", unsafe_allow_html=True)
     
     patr_necessario_meta = meta_renda / taxa_mensal
@@ -606,14 +759,14 @@ with tab_longo_prazo:
     
     st.markdown(f"""
         <div style='background-color: #f8fafc; border: 1.5px solid #000000; padding: 16px; border-radius: 6px; margin-top: 20px; text-align: center;'>
-            <p style='color: #0f172a; font-size: 15px; font-family: Arial; line-height: 1.6; margin: 0;'>💡 <span style='color:#0d47a1; font-weight:bold;'>NOTA CONSULTATIVA TÁTICA:</span> Para cravar a sua meta de <b>R$ 5.000,00/mês</b> rigidamente dentro dos 18 anos planejados, seria necessário reinvestir o seu dividendo inicial = <span style='color:#0d47a1; font-weight:bold;'>R$ {div_mensal_inicial:,.2f}</span> + <span style='color:#742a2a; font-weight:bold;'>R$ {aporte_bolso_necessario:,.2f}</span> do bolso, dando um total de <span style='color:#166534; font-weight:800;'>R$ {total_mensal_advisory:,.2f}</span>.</p>
+            <p style='color: #0f172a; font-size: 15px; font-family: Arial; line-height: 1.6; margin: 0;'>💡 <span style='color:#0d47a1; font-weight:bold;'>NOTA CONSULTATIVA TÁTICA:</span> Para cravar a sua meta de <b>R$ 5.000,00/mês</b> baseada na performance real atual, seria necessário reinvestir seu dividendo = <span style='color:#0d47a1; font-weight:bold;'>R$ {div_mensal_inicial:,.2f}</span> + <span style='color:#742a2a; font-weight:bold;'>R$ {aporte_bolso_necessario:,.2f}</span> do bolso.</p>
         </div>
     """, unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     ch3, ch4 = st.columns(2)
-    with ch3: st.markdown("<p style='text-align: center; font-size: 16px; font-family: Arial; font-weight: bold; color: #0f172a; margin-bottom: -15px;'>🚀 Crescimento do Patrimônio (Modelo Realista B3)</p>", unsafe_allow_html=True)
-    with ch4: st.markdown("<p style='text-align: center; font-size: 16px; font-family: Arial; font-weight: bold; color: #0f172a; margin-bottom: -15px;'>🌊 Efeito Bola de Neve (Média Ponderada Histórica)</p>", unsafe_allow_html=True)
+    with ch3: st.markdown("<p style='text-align: center; font-size: 16px; font-family: Arial; font-weight: bold; color: #0f172a; margin-bottom: -15px;'>🚀 Crescimento do Patrimônio (Base: Histórico Real)</p>", unsafe_allow_html=True)
+    with ch4: st.markdown("<p style='text-align: center; font-size: 16px; font-family: Arial; font-weight: bold; color: #0f172a; margin-bottom: -15px;'>🌊 Efeito Bola de Neve (Média Real Calculada)</p>", unsafe_allow_html=True)
     
     cg3, cg4 = st.columns(2)
     with cg3:
@@ -630,14 +783,8 @@ with tab_longo_prazo:
         fig_bola.add_hline(y=5000, line_dash="dash", line_color="#ef4444")
         st.plotly_chart(fig_bola, use_container_width=True, config={'displayModeBar': False})
         
-    st.markdown("""
-        <div style='background-color: #fdf2f2; border: 1.5px solid #dc2626; padding: 12px; border-radius: 6px; margin-top: 15px; text-align: center;'>
-            <p style='color: #9b2c2c; font-size: 14px; font-weight: bold; margin: 0;'>⚠️ AVISO DE COMPLIANCE: Estratégia em Simulação. Este plano de ação tático e as projeções acima ainda não foram gravados no banco de dados. Caso deseje salvar este cenário permanentemente, retorne à aba de Rebalanceamento e clique em '📄 Gravar ESSE Histórico do App'.</p>
-        </div>
-    """, unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-    with st.expander("📂 Ver Cronograma Detalhado", expanded=False): st.dataframe(df_p, use_container_width=True)
+    st.markdown("""<div style='background-color: #fdf2f2; border: 1.5px solid #dc2626; padding: 12px; border-radius: 6px; text-align: center;'><p style='margin:0; font-size:12px; font-weight:bold; color:#b91c1c;'>⚠️ Linha vermelha pontilhada indica o patamar da Meta de Renda Alvo.</p></div>""", unsafe_allow_html=True)
 
 # ==============================================================================
-# 🛑 FIM DO APP.PY (BLOCO 9 DE 9)
+# 🛑 FIM DO BLOCO 9 DE 9
 # ==============================================================================
