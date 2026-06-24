@@ -196,7 +196,7 @@ ARQUIVO_MOVIMENTACOES = "historico_movimentacoes_cotas.csv"
 
 # PILE 1: Variação física de cotas da carteira ativa
 with st.sidebar.expander("💼 Gestão de Ativos (Ajustes)", expanded=False):
-    st.markdown("#### 🔢 Digite a variação de cotas (+ ou -)")
+    st.markdown("#### 🔢 Ajuste Qtde Cotas (+ ou -)")
     movimentacao_digitada = {}
     for ativo in list(st.session_state.carteira_memoria.keys()):
         mov_cotas = st.number_input(f"Mudar cotas de {ativo}", value=0, step=1, key=f"input_mov_{ativo}")
@@ -204,14 +204,14 @@ with st.sidebar.expander("💼 Gestão de Ativos (Ajustes)", expanded=False):
 
 # PILE 2: Migração Tática Isolada (Antigo Swap Lateral)
 with st.sidebar.expander("🔀 Swap de Ativos (Migração)", expanded=False):
-    st.markdown("#### 🔄 Troca Parcial de Posição")
+    st.markdown("#### 🔄 Troca de Ativos ")
     lista_ativos_disponiveis = list(st.session_state.carteira_memoria.keys())
     ativo_venda = st.selectbox("Reduzir A:", ["Selecione..."] + lista_ativos_disponiveis, key="sb_ativo_venda")
     qtd_max_venda = st.session_state.carteira_memoria[ativo_venda]["qtd"] if ativo_venda != "Selecione..." else 0
     qtd_troca = st.number_input("Migrar 'X' cotas:", min_value=0, max_value=qtd_max_venda, value=0, step=1, key="num_qtd_swap_real")
     ativo_compra = st.selectbox("Aumentar B:", ["Selecione..."] + lista_ativos_disponiveis, key="sb_ativo_compra")
     
-    if st.button("🔄 Executar Troca Parcial", key="btn_executar_swap_lateral", use_container_width=True):
+    if st.button("🔄 Executar Troca ", key="btn_executar_swap_lateral", use_container_width=True):
         if ativo_venda != "Selecione..." and ativo_compra != "Selecione..." and ativo_venda != ativo_compra and qtd_troca > 0:
             capital_movido = qtd_troca * precos_base_estatico.get(ativo_venda, 100.0)
             novas_cotas = int(capital_movido / precos_base_estatico.get(ativo_compra, 100.0))
@@ -226,8 +226,8 @@ with st.sidebar.expander("🔀 Swap de Ativos (Migração)", expanded=False):
 # PILE 3: Expansão e inclusão de novos tickers de radar
 with st.sidebar.expander("➕  Expansão (Novo Ativo)", expanded=False):
     st.markdown("#### 🏢 Inserir Novo FII ")
-    novo_ticker = st.text_input("Novo FII cod. (Ex: TRXF11)", "").upper().strip()
-    nova_qtd_fii = st.number_input("Quantidade Cotas ", min_value=0, value=0, step=1, key="nova_qtd_fii_input")
+    novo_ticker = st.text_input("FII cod. (Ex: TRXF11)", "").upper().strip()
+    nova_qtd_fii = st.number_input("Qdde Cotas ", min_value=0, value=0, step=1, key="nova_qtd_fii_input")
     
     if st.button("➕ Inserir Novo Ativo", key="btn_adicionar_fii", use_container_width=True):
         if novo_ticker and novo_ticker not in st.session_state.carteira_memoria:
@@ -237,7 +237,7 @@ with st.sidebar.expander("➕  Expansão (Novo Ativo)", expanded=False):
 
 # PILE 4: Gestão e Lançamento Dedicado de Proventos
 with st.sidebar.expander("💵 Gestão de Proventos ", expanded=False):
-    st.markdown("#### 💰 Valor total Mês")
+    st.markdown("#### 💰 Valor DY Mês")
     if "dy_real_inserido" not in st.session_state:
         st.session_state.dy_real_inserido = {}
         if "DY_Real_Cota" in df_carteira_salva.columns:
@@ -246,7 +246,7 @@ with st.sidebar.expander("💵 Gestão de Proventos ", expanded=False):
     proventos_digitados = {}
     for ativo, dados in list(st.session_state.carteira_memoria.items()):
         if dados["qtd"] > 0:
-            txt_provento = st.text_input(f"Rendimento - {ativo}", value="", placeholder="Ex: 86,30", key=f"txt_provento_v2_{ativo}").strip()
+            txt_provento = st.text_input(f" DY em R$ - {ativo}", value="", placeholder="Ex: 86,30", key=f"txt_provento_v2_{ativo}").strip()
             try: val_limpo = float(txt_provento.replace(",", ".")) if txt_provento else 0.0
             except ValueError: val_limpo = 0.0
             proventos_digitados[ativo] = val_limpo
@@ -321,8 +321,8 @@ for k, v in carteira_real.items():
         if df_ranking_global_vif is not None and not df_ranking_global_vif.empty:
             linha_s = df_ranking_global_vif[df_ranking_global_vif["Ativo"] == k]
             if not linha_s.empty:
-                score_vif = float(linha_s["Score"].values)
-                dy_historico_real = float(linha_s["DY_Anual"].values)
+                score_vif = float(linha_s["Score"].values[0])
+                dy_historico_real = float(linha_s["DY_Anual"].values[0])
         if dy_historico_real > 1.0: dy_historico_real = dy_historico_real / 100
         renda_prevista_calculada = (float(v["valor"]) * dy_historico_real) / 12
         total_prevista_col += renda_prevista_calculada
@@ -362,6 +362,7 @@ with tab_arbitragem:
     df_html_base = pd.DataFrame(dados_carteira)
     if df_html_base["Score Inteligência"].sum() > 0: df_html_base = df_html_base.sort_values(by="Score Inteligência", ascending=False)
     linha_totais = pd.DataFrame([{"Ativo": "TOTAL", "Quantidade": "-", "Valor (R$)": total_carteira_atual, "Renda Prevista (+30 dias)": total_prevista_col, "Renda Real": total_real_col, "Score Inteligência": "-", "Variação 30 dias": "-"}])
+    # 🛠️ CORREÇÃO DE NOME: Alterado de line_totais para linha_totais
     df_html_base = pd.concat([df_html_base, linha_totais], ignore_index=True)
     def colorir_variacao(val): return 'color: #dc2626 !important; font-weight: 800;' if type(val) == float and val < 0 else 'color: #000000 !important; font-weight: 800;'
     html_tabela_renderizada = (df_html_base.style.format({"Valor (R$)": lambda x: f"R$ {x:,.2f}" if type(x) in [int, float] else x, "Renda Prevista (+30 dias)": lambda x: f"R$ {x:,.2f}" if type(x) in [int, float] else x, "Renda Real": lambda x: f"R$ {x:,.2f}" if type(x) in [int, float] else x, "Score Inteligência": lambda x: f"{x:.2f} pts" if type(x) in [int, float] else x, "Variação 30 dias": lambda x: f"{x:+.2f}%" if type(x) in [int, float] else x}).map(colorir_variacao, subset=["Variação 30 dias"]).hide(axis="index").to_html(placeholder=""))
@@ -372,9 +373,19 @@ with tab_arbitragem:
 # 🛑 FIM DO BLOCO 4 DE 10
 # ==============================================================================
 # ------------------------------------------------------------------------------
-# PROCESSAMENTO DOS GRÁFICOS DE EVOLUÇÃO MENSAL, ROLLING TWELVE E HISTÓRICO REAL
+# PROCESSAMENTO DOS GRÁFICOS DE EVOLUÇÃO MENSAL E PROJEÇÕES (BLOCO 5A DE 10)
 # ------------------------------------------------------------------------------
 with tab_historico:
+    st.markdown("""
+        <style>
+            .tabela-discreta-container { width: 100%; margin: 15px auto; }
+            .tabela-discreta-container table { width: 100%; border-collapse: collapse; font-family: sans-serif; }
+            .tabela-discreta-container th { background-color: #f8fafc !important; color: #64748b !important; text-align: center !important; padding: 10px 12px !important; font-weight: 600; font-size: 13px !important; border: 1px solid #e2e8f0 !important; }
+            .tabela-discreta-container td { padding: 10px 12px !important; font-size: 13px !important; text-align: center !important; color: #334155 !important; white-space: nowrap !important; border: 1px solid #e2e8f0 !important; }
+            .tabela-discreta-container tr:hover { background-color: #f1f5f9 !important; }
+        </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("<h3 style='text-align: center; color: #0f172a; font-weight: 800; margin-top: 10px;'>📊 Evolução de Patrimônio & Proventos Gravados</h3>", unsafe_allow_html=True)
     if os.path.exists(ARQUIVO_HISTORICO):
         df_h = pd.read_csv(ARQUIVO_HISTORICO)
@@ -412,53 +423,64 @@ with tab_historico:
                 fig_r.update_traces(marker_line_width=0, marker_cornerradius=4, textposition="inside", textfont=dict(size=10, color="black", weight="bold"))
                 st.plotly_chart(fig_r, use_container_width=True, config={'displayModeBar': False})
 
-            # Tabela 1: Extrato de Aportes
-            st.markdown("<br><h4 style='text-align: center; color: #0f172a; font-weight: 800;'>📋 Extrato de Planos Executados (Histórico Real)</h4>", unsafe_allow_html=True)
-            df_tabela_real = df_h.copy()
-            df_tabela_real.columns = ["Data/Hora", "Patrimônio Base", "Aporte Bolso", "Renda Nova", "DY Reinvestido"]
-            df_tabela_real = df_tabela_real.sort_values(by="Data/Hora", ascending=False)
-            st.dataframe(df_tabela_real, column_config={"Patrimônio Base": st.column_config.NumberColumn("Patrimônio Base", format="R$ %,.2f"), "Aporte Bolso": st.column_config.NumberColumn("Aporte Bolso", format="R$ %,.2f"), "Renda Nova": st.column_config.NumberColumn("Renda Nova", format="R$ %,.2f"), "DY Reinvestido": st.column_config.NumberColumn("DY Reinvestido", format="R$ %,.2f")}, hide_index=True, use_container_width=True)
+# ==============================================================================
+# 🛑 FIM DO BLOCO 5A DE 10
+# ==============================================================================
+# ------------------------------------------------------------------------------
+# CONSTRUÇÃO E FORMATAÇÃO DAS TABELAS DISCRETAS (BLOCO 5B DE 10)
+# ------------------------------------------------------------------------------
+with tab_historico:
+    if os.path.exists(ARQUIVO_HISTORICO) and len(df_h) >= 1:
+        # Tabela 1: Extrato de Aportes com Novas Colunas, Nomes e Ordem Ajustada
+        st.markdown("<br><h4 style='text-align: center; color: #0f172a; font-weight: 800;'>📋 Extrato de Planos Executados (Histórico Real)</h4>", unsafe_allow_html=True)
+        df_tabela_real = df_h.copy()
+        df_tabela_real.columns = ["Data", "Patrimônio Base", "Aporte do Bolso", "DY Projetado", "DY reinvestido"]
+        
+        # 🛠️ AJUSTE DE DATA E CRIAÇÃO DA COLUNA PATRIMÔNIO C/ APORTE
+        df_tabela_real["Data"] = df_tabela_real["Data"].apply(lambda x: str(x).split(" ")[0] if " " in str(x) else str(x))
+        df_tabela_real["Patrimônio c/ Aporte"] = df_tabela_real["Patrimônio Base"] + df_tabela_real["Aporte do Bolso"]
+        
+        ordem_colunas = ["Data", "Patrimônio Base", "Aporte do Bolso", "DY reinvestido", "Patrimônio c/ Aporte", "DY Projetado"]
+        df_tabela_real = df_tabela_real[ordem_colunas].sort_values(by="Data", ascending=False)
+        
+        html_tabela_real = df_tabela_real.style.format({"Patrimônio Base": "R$ {:,.2f}", "Aporte do Bolso": "R$ {:,.2f}", "DY reinvestido": "R$ {:,.2f}", "Patrimônio c/ Aporte": "R$ {:,.2f}", "DY Projetado": "R$ {:,.2f}"}).hide(axis="index").to_html(placeholder="")
+        st.markdown(f"<div class='tabela-discreta-container'>{html_tabela_real}</div>", unsafe_allow_html=True)
 
-            # Tabela 2: Histórico de Cotas Reordenado
-            st.markdown("<br><h4 style='text-align: center; color: #0f172a; font-weight: 800;'>📜 Histórico de Compra e Venda de Cotas</h4>", unsafe_allow_html=True)
-            movimentacoes_base = [
-                {"Data": "16/06/2026", "Ativo": "MXRF11", "Total Atual de Cotas": 863, "Operação": "Compra", "Diferença": 110, "Total Anterior de Cotas": 753, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "16/06/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 118, "Operação": "Compra", "Diferença": 11, "Total Anterior de Cotas": 107, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "16/06/2026", "Ativo": "KNCR11", "Total Atual de Cotas": 66, "Operação": "Compra", "Diferença": 17, "Total Anterior de Cotas": 49, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "29/05/2026", "Ativo": "HGLG11", "Total Atual de Cotas": 49, "Operação": "Compra", "Diferença": 9, "Total Anterior de Cotas": 40, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "29/05/2026", "Ativo": "KNCR11", "Total Atual de Cotas": 49, "Operação": "Compra", "Diferença": 14, "Total Anterior de Cotas": 35, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "26/05/2026", "Ativo": "VISC11", "Total Atual de Cotas": 0, "Operação": "Venda", "Diferença": -3, "Total Anterior de Cotas": 3, "Estratégia Origem": "Swap"},
-                {"Data": "21/05/2026", "Ativo": "KNCR11", "Total Atual de Cotas": 35, "Operação": "Compra", "Diferença": 20, "Total Anterior de Cotas": 15, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "21/05/2026", "Ativo": "HGLG11", "Total Atual de Cotas": 40, "Operação": "Compra", "Diferença": 37, "Total Anterior de Cotas": 3, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "21/05/2026", "Ativo": "MXRF11", "Total Atual de Cotas": 753, "Operação": "Compra", "Diferença": 553, "Total Anterior de Cotas": 200, "Estratégia Origem": "Expansão"},
-                {"Data": "21/05/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 107, "Operação": "Venda", "Diferença": -192, "Total Anterior de Cotas": 299, "Estratégia Origem": "Swap"},
-                {"Data": "19/05/2026", "Ativo": "HGLG11", "Total Atual de Cotas": 3, "Operação": "Compra", "Diferença": 3, "Total Anterior de Cotas": 0, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "19/05/2026", "Ativo": "VISC11", "Total Atual de Cotas": 3, "Operação": "Compra", "Diferença": 3, "Total Anterior de Cotas": 0, "Estratégia Origem": "Expansão"},
-                {"Data": "19/05/2026", "Ativo": "MXRF11", "Total Atual de Cotas": 200, "Operação": "Compra", "Diferença": 50, "Total Anterior de Cotas": 150, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "04/05/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 299, "Operação": "Compra", "Diferença": 39, "Total Anterior de Cotas": 260, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "22/04/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 260, "Operação": "Compra", "Diferença": 32, "Total Anterior de Cotas": 228, "Estratégia Origem": "Rebalanceamento"},
-                {"Data": "22/04/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 228, "Operação": "Compra", "Diferença": 47, "Total Anterior de Cotas": 181, "Estratégia Origem": "Rebalanceamento"}
-            ]
-            
-            if os.path.exists("historico_movimentacoes_cotas.csv"):
-                try:
-                    df_mov_fisco = pd.read_csv("historico_movimentacoes_cotas.csv")
-                    for _, row in df_mov_fisco.iterrows():
-                        multiplicador = 1 if row["Tipo"] == "COMPRA" else -1
-                        movimentacoes_base.append({"Data": datetime.strptime(row["Data"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y"), "Ativo": row["Ativo"], "Total Atual de Cotas": int(row["Qtd Nova"]), "Operação": row["Tipo"].title(), "Diferença": int(row["Diferença"]) * multiplicador, "Total Anterior de Cotas": int(row["Qtd Anterior"]), "Estratégia Origem": row["Estratégia Origem"]})
-                except Exception: pass
-                
-            df_tabela_mov = pd.DataFrame(movimentacoes_base)
-            def estilo_diferenca(val):
-                color = '#dc2626' if type(val) in [int, float] and val < 0 else '#000000'
-                return f'color: {color} !important; font-weight: bold;'
-                
-            html_mov_renderizada = df_tabela_mov.style.map(estilo_diferenca, subset=["Diferença"]).format({"Diferença": lambda x: f"{x:d}" if type(x) in [int, float] else x}).hide(axis="index").to_html(placeholder="")
-            st.markdown(f"<div class='fii-table-wrapper'>{html_mov_renderizada}</div>", unsafe_allow_html=True)
+        # Tabela 2: Histórico de Cotas
+        st.markdown("<br><h4 style='text-align: center; color: #0f172a; font-weight: 800;'>📜 Histórico de Compra e Venda de Cotas</h4>", unsafe_allow_html=True)
+        movimentacoes_base = [
+            {"Data": "16/06/2026", "Ativo": "MXRF11", "Total Atual de Cotas": 863, "Operação": "Compra", "Diferença": 110, "Total Anterior de Cotas": 753, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "16/06/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 118, "Operação": "Compra", "Diferença": 11, "Total Anterior de Cotas": 107, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "16/06/2026", "Ativo": "KNCR11", "Total Atual de Cotas": 66, "Operação": "Compra", "Diferença": 17, "Total Anterior de Cotas": 49, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "29/05/2026", "Ativo": "HGLG11", "Total Atual de Cotas": 49, "Operação": "Compra", "Diferença": 9, "Total Anterior de Cotas": 40, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "29/05/2026", "Ativo": "KNCR11", "Total Atual de Cotas": 49, "Operação": "Compra", "Diferença": 14, "Total Anterior de Cotas": 35, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "26/05/2026", "Ativo": "VISC11", "Total Atual de Cotas": 0, "Operação": "Venda", "Diferença": -3, "Total Anterior de Cotas": 3, "Estratégia Origem": "Swap"},
+            {"Data": "21/05/2026", "Ativo": "KNCR11", "Total Atual de Cotas": 35, "Operação": "Compra", "Diferença": 20, "Total Anterior de Cotas": 15, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "21/05/2026", "Ativo": "HGLG11", "Total Atual de Cotas": 40, "Operação": "Compra", "Diferença": 37, "Total Anterior de Cotas": 3, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "21/05/2026", "Ativo": "MXRF11", "Total Atual de Cotas": 753, "Operação": "Compra", "Diferença": 553, "Total Anterior de Cotas": 200, "Estratégia Origem": "Expansão"},
+            {"Data": "21/05/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 107, "Operação": "Venda", "Diferença": -192, "Total Anterior de Cotas": 299, "Estratégia Origem": "Swap"},
+            {"Data": "19/05/2026", "Ativo": "HGLG11", "Total Atual de Cotas": 3, "Operação": "Compra", "Diferença": 3, "Total Anterior de Cotas": 0, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "19/05/2026", "Ativo": "VISC11", "Total Atual de Cotas": 3, "Operação": "Compra", "Diferença": 3, "Total Anterior de Cotas": 0, "Estratégia Origem": "Expansão"},
+            {"Data": "19/05/2026", "Ativo": "MXRF11", "Total Atual de Cotas": 200, "Operação": "Compra", "Diferença": 50, "Total Anterior de Cotas": 150, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "04/05/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 299, "Operação": "Compra", "Diferença": 39, "Total Anterior de Cotas": 260, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "22/04/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 260, "Operação": "Compra", "Diferença": 32, "Total Anterior de Cotas": 228, "Estratégia Origem": "Rebalanceamento"},
+            {"Data": "22/04/2026", "Ativo": "KNHF11", "Total Atual de Cotas": 228, "Operação": "Compra", "Diferença": 47, "Total Anterior de Cotas": 181, "Estratégia Origem": "Rebalanceamento"}
+        ]
+        
+        if os.path.exists("historico_movimentacoes_cotas.csv"):
+            try:
+                df_mov_fisco = pd.read_csv("historico_movimentacoes_cotas.csv")
+                for _, row in df_mov_fisco.iterrows():
+                    movimentacoes_base.append({"Data": datetime.strptime(row["Data"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y"), "Ativo": row["Ativo"], "Total Atual de Cotas": int(row["Qtd Nova"]), "Operação": row["Tipo"].title(), "Diferença": int(row["Diferença"]), "Total Anterior de Cotas": int(row["Qtd Anterior"]), "Estratégia Origem": row["Estratégia Origem"]})
+            except Exception: pass
+
+        df_mov_tabela = pd.DataFrame(movimentacoes_base)
+        html_tabela_mov = df_mov_tabela.style.hide(axis="index").to_html(placeholder="")
+        st.markdown(f"<div class='tabela-discreta-container'>{html_tabela_mov}</div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 🛑 FIM DO BLOCO 5 DE 10
-# ==============================================================================    
+# 🛑 FIM DO BLOCO 5B DE 10
+# ==============================================================================
 # ------------------------------------------------------------------------------
 # LOGICA PROCESSUAL DA ENGINE QUANTITATIVA DE ARBITRAGEM E ALOCACAO
 # ------------------------------------------------------------------------------
@@ -604,9 +626,15 @@ with tab_arbitragem:
 # ==============================================================================
 # 🛑 FIM DO BLOCO 7 DE 10
 # ==============================================================================
+# ------------------------------------------------------------------------------
+# INTERFACE PREMIUM: DIAGNÓSTICO TÁTICO E TOMADA DE DECISÃO (BLOCO 8 DE 10)
+# ------------------------------------------------------------------------------
+with tab_arbitragem:
+    cb1, cb2 = st.columns(2)
+
     with cb1:
-        # 🛠️ TRAVA DE ÍNDICE: Adicionado [0] para converter a lista de preços em número decimal comum com segurança
-        p_venda = float(df_ranking_completo[df_ranking_completo["Ativo"] == "HGLG11"]["Preco"].values[0]) if not df_ranking_completo[df_ranking_completo["Ativo"] == "HGLG11"].empty else 156.20
+        linha_ve = df_ranking_completo[df_ranking_completo["Ativo"] == "HGLG11"]
+        p_venda = float(linha_ve["Preco"].values[0]) if not linha_ve.empty else 156.20
         p_compra = float(df_ranking_completo[df_ranking_completo["Ativo"] == "KNCR11"]["Preco"].values[0]) if not df_ranking_completo[df_ranking_completo["Ativo"] == "KNCR11"].empty else 104.90
         
         dy_venda = float(df_ranking_completo[df_ranking_completo["Ativo"] == "HGLG11"]["DY_Anual"].values[0]) if not df_ranking_completo[df_ranking_completo["Ativo"] == "HGLG11"].empty else 0.091
@@ -661,17 +689,20 @@ with tab_arbitragem:
 # ==============================================================================
 # 🛑 FIM DO BLOCO 8 DE 10
 # ==============================================================================
-        # HERDA O CÁLCULO DINÂMICO PARA SINCRONIZAÇÃO ABSOLUTA DO REBALANCEAMENTO
+# ------------------------------------------------------------------------------
+# LÓGICA DE EXECUÇÃO DE REBALANCEAMENTO E COMPRAS (BLOCO 9 DE 10)
+# ------------------------------------------------------------------------------
+with tab_arbitragem:
     linha_venda = df_ranking_completo[df_ranking_completo["Ativo"] == "HGLG11"]
     p_venda = float(linha_venda["Preco"].values[0]) if not linha_venda.empty else 156.20
-    
+
     linha_compra = df_ranking_completo[df_ranking_completo["Ativo"] == "KNCR11"]
     p_compra = float(linha_compra["Preco"].values[0]) if not linha_compra.empty else 104.90
 
     cotas_venda_sug = 10
     capital_origem_swap = cotas_venda_sug * p_venda
     cotas_compra_sug = int(capital_origem_swap / p_compra)
-    
+
     swap_aprovado_final = st.session_state.get("swap_aprovado_global", False)
     sim_dados = st.session_state.get("dados_simulados")
 
@@ -727,7 +758,7 @@ with tab_arbitragem:
                     lista_cotas_comprar.append(f"■ Destinação de Capital: Comprar <b>{info['qtd']} cotas</b> de <b>{ativo_nome}</b> (Valor aproximado = R$ {custo_fii:,.2f})")
                         
         texto_cotas_final = "<br>".join(lista_cotas_comprar) if lista_cotas_comprar else "Ajuste financeiro abaixo do preço de 1 cota de tela."
-        texto_rebalanceamento = f"🎯 <b>Gatilho de Rebalanceamento ATIVADO!</b> Operações otimizadas para uso máximo do saldo. Total Alocado: R$ {custo_total_realizado:,.2f} de R$ {orcamento_total_compras:,.2f}:<br><br>{texto_cotas_final}"
+        texto_rebalanceamento = f"🎯 <b>Gatilho de Rebalanceamento ATIVADO!</b> Otimizado para uso máximo do Novo Aporte. Total Alocado: R$ {custo_total_realizado:,.2f} de R$ {orcamento_total_compras:,.2f}:<br><br>{texto_cotas_final}"
     else:
         texto_rebalanceamento = f"ℹ️ <b>Nenhum rebalanceamento sugerido.</b> Como a eficiência tática de arbitragem projetada não atingiu o target e nenhum aporte novo foi injetado, a recomendação oficial é manter a estrutura atual intocada."
         
@@ -744,22 +775,31 @@ with tab_arbitragem:
 # 🛑 FIM DO BLOCO 9 DE 10
 # ==============================================================================
 # ------------------------------------------------------------------------------
-# ABA CONTIGUAMENTE INTEGRADA: GESTÃO LONGO PRAZO (SIMULADOR BOLA DE NEVE FIEL À B3)
+# ABA CONTIGUAMENTE INTEGRADA: GESTÃO LONGO PRAZO (SIMULADOR BOLA DE NEVE)
 # ------------------------------------------------------------------------------
 with tab_longo_prazo:
     st.markdown("<h2 style='text-align: center; font-size: 30px; font-weight: 900; color: #0f172a; margin-top: 10px; margin-bottom: 25px;'>📈 Simulador de Renda Futura & Efeito Bola de Neve</h2>", unsafe_allow_html=True)
-    st.markdown("<style>.box-simulador { padding: 10px 14px; border-radius: 6px; min-height: 90px; display: flex; flex-direction: column; justify-content: center; text-align: center; border: 1.5px solid #000000 !important; }.box-azul { background-color: #ebf3fc; }.box-vermelho { background-color: #fdf2f2; }.box-verde { background-color: #e6fffa; }.lbl-sim { font-size: 16px; font-weight: bold; margin: 0; letter-spacing: 0.5px; }.val-sim { font-size: 30px; font-weight: 900; margin: 2px 0 0 0; }</style>", unsafe_allow_html=True)
+    st.markdown("<style>.box-simulador { padding: 16px 10px; border-radius: 6px; min-height: 115px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1.5px solid #000000 !important; }.box-azul { background-color: #ebf3fc; }.box-vermelho { background-color: #fdf2f2; }.box-verde { background-color: #e6fffa; }.box-simulador p.lbl-sim { font-size: 1.15rem !important; font-weight: 800 !important; margin: 0px !important; letter-spacing: 0.3px; line-height: 1.2 !important; white-space: nowrap !important; }.box-simulador p.val-sim { font-size: 1.9rem !important; font-weight: 900 !important; margin: 8px 0px 0px 0px !important; line-height: 1.1 !important; white-space: nowrap !important; }</style>", unsafe_allow_html=True)
     
+    # 🛠️ CORREÇÃO DE FLUXO: meta_renda declarada no topo para evitar o NameError
+    meta_renda = 5000.0
     sim_dados = st.session_state.dados_simulados
     patrimonio_inicial_real = float(sim_dados["patrimonio_total_futuro_v2"]) if sim_dados is not None else float(total_carteira_atual)
     div_mensal_inicial = float(renda_carteira_atual_estimada)
     
-    # Sincronização Dinâmica do Yield Real da Carteira
     yield_real_fiel = (div_mensal_inicial * 12) / patrimonio_inicial_real if patrimonio_inicial_real > 0 else 0.105
     taxa_mensal = (1 + yield_real_fiel) ** (1/12) - 1
     
-    # Resgata o aporte recorrente digitado por você na barra lateral
-    aporte_recorrente_bolso = float(st.session_state.get("input_aporte_bolso", 0.0))
+    # Premissa real vinda da barra lateral para alimentar os gráficos sem inflação
+    aporte_recorrente_real_base = float(st.session_state.get("input_aporte_bolso", 0.0))
+    
+    # Processador do Aporte Sugerido (Compliance coletado de forma segura)
+    patr_alvo_necessario = meta_renda / taxa_mensal if taxa_mensal > 0 else 0.0
+    fator_composto = (1 + taxa_mensal) ** 216
+    numerador_reais = patr_alvo_necessario - (patrimonio_inicial_real * fator_composto)
+    denominador_reais = ((fator_composto - 1) / taxa_mensal) if taxa_mensal > 0 else 216
+    aporte_necessario_exato = max(0.0, numerador_reais / denominador_reais)
+    aporte_sugerido_calculado = max(0.0, aporte_necessario_exato - aporte_recorrente_real_base)
     
     anos_eixo = [2.5, 5.0, 7.5, 10.0, 12.0, 14.0, 16.0, 18.0]
     lista_patr, lista_prov = [], []
@@ -767,37 +807,39 @@ with tab_longo_prazo:
         meses = int(t_anos * 12)
         patr_acumulado = patrimonio_inicial_real
         for _ in range(meses):
-            renda_gerada = patr_acumulado * taxa_mensal
-            patr_acumulado += renda_gerada + aporte_recorrente_bolso
+            patr_acumulado += (patr_acumulado * taxa_mensal) + aporte_recorrente_real_base
         lista_patr.append(round(patr_acumulado, 2))
         lista_prov.append(round(patr_acumulado * taxa_mensal, 2))
         
     df_p = pd.DataFrame({"Tempo": ["2.5", "5", "7.5", "10", "12", "14", "16", "18"], "Patrimônio Acumulado": lista_patr, "Proventos Mensais": lista_prov})
     
-    meta_renda = 5000.0
     meses_meta, patr_meta_acumulado = 0, patrimonio_inicial_real
     while (patr_meta_acumulado * taxa_mensal) < meta_renda and meses_meta < 600:
-        patr_meta_acumulado += (patr_meta_acumulado * taxa_mensal) + aporte_recorrente_bolso
+        patr_meta_acumulado += (patr_meta_acumulado * taxa_mensal) + aporte_recorrente_real_base
         meses_meta += 1
     anos_meta, restante_meses = meses_meta // 12, meses_meta % 12
 
     cl1, cl2, cl3 = st.columns(3)
     with cl1: st.markdown(f"<div class='box-simulador box-azul'><p class='lbl-sim' style='color:#1e40af;'>🎯 RENDA ALVO</p><p class='val-sim' style='color:#1e3a8a;'>R$ {meta_renda:,.2f}</p></div>", unsafe_allow_html=True)
     with cl2: st.markdown(f"<div class='box-simulador box-vermelho'><p class='lbl-sim' style='color:#9b2c2c;'>🔁 DIVIDENDO REINVESTIDO</p><p class='val-sim' style='color:#742a2a;'>R$ {div_mensal_inicial:,.2f}</p></div>", unsafe_allow_html=True)
-    with cl3: st.markdown(f"<div class='box-simulador box-verde'><p class='lbl-sim' style='color:#234e52;'>⏳ APORTE RECORRENTE</p><p class='val-sim' style='color:#1d4044;'>R$ {aporte_recorrente_bolso:,.2f}</p></div>", unsafe_allow_html=True)
+    with cl3: st.markdown(f"<div class='box-simulador box-verde'><p class='lbl-sim' style='color:#234e52;'>💡 APORTE SUGERIDO</p><p class='val-sim' style='color:#1d4044;'>R$ {aporte_sugerido_calculado:,.2f}</p></div>", unsafe_allow_html=True)
     
-    st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
     cl4, cl5, cl6 = st.columns(3)
     with cl4: st.markdown(f"<div class='box-simulador box-azul'><p class='lbl-sim' style='color:#1e40af;'>💸 RENDA MENSAL (18 ANOS)</p><p class='val-sim' style='color:#1e3a8a;'>R$ {lista_prov[-1]:,.2f}</p></div>", unsafe_allow_html=True)
-    with cl5: st.markdown(f"<div class='box-simulador box-vermelho'><p class='lbl-sim' style='color:#9b2c2c;'>💰 PATRIMÔNIO (18 ANOS)</p><p class='val-sim' style='color:#742a2a;'>R$ {lista_patr[-1]:,.2f}</p><span style='color:#9b2c2c; font-size:12px; font-weight:bold;'>DY Médio: {yield_real_fiel*100:.2f}% a.a.</span></div>", unsafe_allow_html=True)
-    with cl6: st.markdown(f"<div class='box-simulador box-verde'><p class='lbl-sim' style='color:#234e52;'>🏁 META ATINGIDA EM:</p><p class='val-sim' style='color:#1d4044;'>{anos_meta}a e {restante_meses}m</p></div>", unsafe_allow_html=True)
+    with cl5: st.markdown(f"<div class='box-simulador box-vermelho'><p class='lbl-sim' style='color:#9b2c2c;'>💰 PATRIMÔNIO (18 ANOS)</p><p class='val-sim' style='color:#742a2a;'>R$ {lista_patr[-1]:,.2f}</p><span style='color:#9b2c2c; font-size:13px; font-weight:bold; margin-top:4px;'>DY Médio: {yield_real_fiel*100:.2f}% a.a.</span></div>", unsafe_allow_html=True)
+    with cl6: st.markdown(f"<div class='box-simulador box-verde'><p class='lbl-sim' style='color:#234e52;'>⏳ META ATINGIDA EM:</p><p class='val-sim' style='color:#1d4044;'>{anos_meta}a e {restante_meses}m</p></div>", unsafe_allow_html=True)
     
-    st.markdown(f"""
-        <div style='background-color: #f8fafc; border: 1.5px solid #000000; padding: 16px; border-radius: 6px; margin-top: 20px; text-align: center;'>
-            <p style='color: #0f172a; font-size: 15px; font-family: Arial; line-height: 1.6; margin: 0;'>💡 <span style='color:#0d47a1; font-weight:bold;'>NOTA CONSULTATIVA TÁTICA:</span> Mantendo a performance atual e o reinvestimento religioso de dividendos, sua carteira alcançará a meta estipulada em ritmo otimizado pela inteligência quantitativa.</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
+    if anos_meta > 18 or aporte_recorrente_real_base == 0:
+        html_compliance = f"""<div style='background-color: #fef2f2; border: 2px solid #ef4444; border-left: 8px solid #dc2626; padding: 16px; border-radius: 6px; margin-top: 20px; text-align: left;'>
+            <p style='margin: 0px; font-family: Arial; font-size: 15px; line-height: 1.6; color: #991b1b;'>⚠️ <b>NOTA DE CONFORMIDADE TÁTICA:</b> O tempo projetado para atingir seu objetivo ultrapassa o horizonte de 18 anos ({anos_meta} anos). Pelas regras vigentes de alocação quantitativa, para enquadrar a estratégia e atingir a meta no prazo limite, é recomendável avaliar uma complementação mensal de <b>R$ {aporte_sugerido_calculado:,.2f}</b> somada ao reinvestimento do seu DY.</p>
+        </div>"""
+    else:
+        html_compliance = f"""<div style='background-color: #f0fdf4; border: 2px solid #22c55e; border-left: 8px solid #16a34a; padding: 16px; border-radius: 6px; margin-top: 20px; text-align: left;'>
+            <p style='margin: 0px; font-family: Arial; font-size: 15px; line-height: 1.6; color: #166534;'>📊 <b>NOTA DE CONFORMIDADE TÁTICA:</b> Plano de alocação validado com sucesso. A combinação atual de aportes recorrentes e reinvestimento integral de dividendos cumpre com os requisitos de optimização patrimonial para o horizonte estipulado.</p>
+        </div>"""
+
+    st.markdown(html_compliance, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     ch3, ch4 = st.columns(2)
     with ch3: st.markdown("<p style='text-align: center; font-size: 16px; font-family: Arial; font-weight: bold; color: #0f172a; margin-bottom: -15px;'>🚀 Crescimento do Patrimônio (Base: Histórico Real)</p>", unsafe_allow_html=True)
